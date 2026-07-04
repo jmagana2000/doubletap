@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "doubletap"
+version = "0.1.0"
+description = "MTG deck-building app with offline-RL card recommendations"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "rapidfuzz",
+    "typer",
+    "numpy",
+]
+
+[project.optional-dependencies]
+ocr = ["pyobjc-framework-Vision; sys_platform == 'darwin'"]
+dev = ["pytest", "respx", "ruff"]
+
+[project.scripts]
+doubletap = "doubletap.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/doubletap"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "macos_ocr: manual smoke tests that call the real Apple Vision framework",
+]
