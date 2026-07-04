@@ -26,6 +26,7 @@ packages = ["src/doubletap"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not macos_ocr'"
 markers = [
     "macos_ocr: manual smoke tests that call the real Apple Vision framework",
 ]

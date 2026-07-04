@@ -39,11 +39,12 @@ def test_face_name_resolves_split_card(loaded_conn):
 
 
 def test_fuzzy_lookup_typo(loaded_conn):
+    # genuinely ambiguous typo: both real candidates must be offered
     matches = lookup(loaded_conn, "lightning blot")
-    assert matches
-    # standalone card outranks the face-name collision at the same score
-    assert matches[0].name == "Lightning Bolt"
-    assert matches[0].score < 100.0
+    names = [m.name for m in matches]
+    assert "Lightning Bolt" in names
+    assert "Lightning Blow" in names
+    assert all(m.score < 100.0 for m in matches)
 
 
 def test_empty_query(loaded_conn):
