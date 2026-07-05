@@ -16,6 +16,9 @@ dependencies = [
 
 [project.optional-dependencies]
 ocr = ["pyobjc-framework-Vision; sys_platform == 'darwin'"]
+# Intel macs: last torch wheel is 2.2.2 (cp311) and needs numpy<2 —
+# create the venv with python3.11 and `pip install "torch==2.2.2" "numpy<2"`
+ml = ["torch>=2.2"]
 dev = ["pytest", "respx", "ruff"]
 
 [project.scripts]

@@ -14,6 +14,8 @@ corpus_app = typer.Typer(
     no_args_is_help=True, help="Training corpus of public decklists"
 )
 app.add_typer(corpus_app, name="corpus")
+train_app = typer.Typer(no_args_is_help=True, help="Train recommendation models")
+app.add_typer(train_app, name="train")
 
 
 @cards_app.command("sync")
@@ -172,6 +174,167 @@ def corpus_stats():
         " ON s.deck_id = d.deck_id WHERE d.status = 'parsed' GROUP BY d.format"
     ).fetchall():
         typer.echo(f"{fmt}: {n} parsed decks, {cards} distinct cards, avg size {avg}")
+
+
+@train_app.command("bc")
+def train_bc_cmd(
+    deck_format: str = typer.Option(..., "--format", "-f"),
+    steps: int = typer.Option(1500),
+    seed: int = typer.Option(0),
+):
+    """Train the behavior-cloning baseline."""
+    from .ml.train_bc import train_bc
+
+    conn = db.connect()
+    path = train_bc(
+        conn, formats.get_format(deck_format), steps=steps, seed=seed, log=typer.echo
+    )
+    typer.echo(f"Wrote {path}")
+
+
+@train_app.command("cql")
+def train_cql_cmd(
+    deck_format: str = typer.Option(..., "--format", "-f"),
+    steps: int = typer.Option(1500),
+    alpha: float = typer.Option(1.0, help="Conservative penalty weight"),
+    seed: int = typer.Option(0),
+    init_from_bc: bool = typer.Option(True, help="Initialize from the BC checkpoint"),
+):
+    """Train CQL on PPMI+structure rewards (A/B against BC on the same eval)."""
+    from .ml.reward import PMIModel
+    from .ml.train_cql import train_cql
+
+    conn = db.connect()
+    fmt = formats.get_format(deck_format)
+    pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
+    if not pmi_path.exists():
+        typer.echo(f"Missing {pmi_path}; run corpus pmi first.", err=True)
+        raise typer.Exit(code=1)
+    bc_path = db.data_home() / "models" / f"bc_{fmt.name}.pt"
+    init = bc_path if init_from_bc and bc_path.exists() else None
+    path = train_cql(
+        conn,
+        fmt,
+        PMIModel.load(pmi_path),
+        steps=steps,
+        alpha=alpha,
+        seed=seed,
+        init_from=init,
+        log=typer.echo,
+    )
+    typer.echo(f"Wrote {path}")
+
+
+@app.command("eval")
+def eval_cmd(
+    model_path: Path = typer.Option(..., "--model", exists=True),
+    n_hide: int = typer.Option(10),
+    seed: int = typer.Option(0),
+):
+    """Recovery@k of a checkpoint on the holdout split it was trained against."""
+    import numpy as np
+    import torch
+
+    from .ml.data import build_vocab, load_corpus
+    from .ml.eval import recovery_at_k
+    from .ml.model import load_checkpoint
+    from .ml.train_bc import split_corpus
+
+    conn = db.connect()
+    ckpt_meta = torch.load(model_path, map_location="cpu")
+    fmt = formats.get_format(ckpt_meta["format"])
+    vocab = build_vocab(conn, fmt)
+    model, ckpt = load_checkpoint(model_path, vocab)
+    _, holdout = split_corpus(load_corpus(conn, vocab, fmt), seed=seed)
+    metrics = recovery_at_k(
+        model, holdout, vocab, fmt, n_hide=n_hide, rng=np.random.default_rng(seed)
+    )
+    typer.echo(f"{ckpt['algo']} {fmt.name}: {metrics}")
+
+
+@app.command("recommend")
+def recommend(
+    deck_path: Path = typer.Option(..., "--deck", exists=True, readable=True),
+    k: int = typer.Option(20, "-k", help="Number of suggestions"),
+    model_path: Path = typer.Option(
+        None,
+        "--model",
+        help="Checkpoint; defaults to cql_<format>.pt, falling back to bc_<format>.pt",
+    ),
+):
+    """Suggest the top-k additions for a (partial) deck, with synergy rationale
+    and a structural gap report. Lands are handled by the gap report, not the
+    model."""
+    import numpy as np
+
+    from .ml.data import build_vocab
+    from .ml.eval import score_state
+    from .ml.model import load_checkpoint
+    from .ml.reward import PMIModel
+
+    conn = db.connect()
+    deck = decks.Deck.load(deck_path)
+    fmt = formats.get_format(deck.format)
+
+    if model_path is None:
+        models_dir = db.data_home() / "models"
+        for candidate in (
+            models_dir / f"cql_{fmt.name}.pt",
+            models_dir / f"bc_{fmt.name}.pt",
+        ):
+            if candidate.exists():
+                model_path = candidate
+                break
+        if model_path is None:
+            typer.echo("No trained model found; run doubletap train first.", err=True)
+            raise typer.Exit(code=1)
+
+    vocab = build_vocab(conn, fmt)
+    model, ckpt = load_checkpoint(model_path, vocab)
+    pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
+    pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
+
+    for violation in formats.validate(conn, deck):
+        if violation.code != "wrong_size":  # partial decks are the normal input
+            typer.echo(f"note: {violation.message}")
+
+    partial = []
+    for oid, qty in deck.entries.items():
+        idx = vocab.index.get(oid)
+        if idx is None:
+            typer.echo(f"note: skipping card not legal in {fmt.name} (oracle {oid})")
+            continue
+        partial.extend([idx] * qty)
+    partial = np.array(partial, dtype=np.int64)
+    commander_idx = vocab.index.get(deck.commander) if deck.commander else None
+
+    def card_name(idx):
+        (name,) = conn.execute(
+            "SELECT name FROM cards WHERE oracle_id = ?", (vocab.oracle_ids[idx],)
+        ).fetchone()
+        return name
+
+    scores = score_state(model, vocab, fmt, partial, commander_idx)
+    top = np.argsort(-scores)[:k]
+    typer.echo(f"Top {k} additions ({ckpt['algo']} model, {model_path.name}):")
+    for rank, idx in enumerate(top, 1):
+        line = f"{rank:3}. {card_name(idx):42} {scores[idx]:7.3f}"
+        if pmi is not None:
+            contributors = pmi.top_contributors(int(idx), partial)
+            if contributors:
+                line += "  with " + ", ".join(
+                    f"{card_name(c)} ({v:.1f})" for c, v in contributors
+                )
+        typer.echo(line)
+
+    size = deck.size()
+    n_lands = int(vocab.land[partial].sum())
+    land_frac = n_lands / max(size, 1)
+    target_lands = round(fmt.land_fraction_target * fmt.deck_size)
+    typer.echo(
+        f"\nStructure: {size}/{fmt.deck_size} cards; {n_lands} lands ({land_frac:.0%})"
+        f" vs ~{target_lands} target — mana base is yours to tune."
+    )
 
 
 @deck_app.command("validate")
