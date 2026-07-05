@@ -3,13 +3,17 @@ from pathlib import Path
 
 import typer
 
-from . import db, decks, formats, names, scryfall
+from . import archidekt, db, decks, formats, names, scryfall
 
 app = typer.Typer(no_args_is_help=True)
 cards_app = typer.Typer(no_args_is_help=True, help="Local Scryfall card cache")
 app.add_typer(cards_app, name="cards")
 deck_app = typer.Typer(no_args_is_help=True, help="Import and manage decks")
 app.add_typer(deck_app, name="deck")
+corpus_app = typer.Typer(
+    no_args_is_help=True, help="Training corpus of public decklists"
+)
+app.add_typer(corpus_app, name="corpus")
 
 
 @cards_app.command("sync")
@@ -95,6 +99,40 @@ def deck_import(
     if out:
         deck.save(conn, out)
         typer.echo(f"Wrote {out}")
+
+
+@corpus_app.command("crawl")
+def corpus_crawl(
+    deck_format: str = typer.Option(..., "--format", "-f"),
+    max_decks: int = typer.Option(1000, "--max", help="Deck ids to queue this run"),
+):
+    """Crawl public Archidekt decks (rate-limited, resumable) into the corpus."""
+    conn = db.connect()
+
+    def progress(done, total):
+        if done % 25 == 0 or done == total:
+            typer.echo(f"fetched {done}/{total}")
+
+    outcomes = archidekt.crawl(conn, deck_format, max_decks, progress=progress)
+    typer.echo(f"parse outcomes: {dict(outcomes)}")
+
+
+@corpus_app.command("stats")
+def corpus_stats():
+    """Corpus size and coverage by format."""
+    conn = db.connect()
+    rows = conn.execute(
+        "SELECT format, status, COUNT(*) FROM decks GROUP BY format, status ORDER BY format, status"
+    ).fetchall()
+    for fmt, status, n in rows:
+        typer.echo(f"{fmt:12} {status:9} {n}")
+    for fmt, n, cards, avg in conn.execute(
+        "SELECT d.format, COUNT(DISTINCT d.deck_id), COUNT(DISTINCT dc.oracle_id),"
+        " ROUND(AVG(sz), 1) FROM decks d JOIN deck_cards dc ON dc.deck_id = d.deck_id"
+        " JOIN (SELECT deck_id, SUM(qty) sz FROM deck_cards GROUP BY deck_id) s"
+        " ON s.deck_id = d.deck_id WHERE d.status = 'parsed' GROUP BY d.format"
+    ).fetchall():
+        typer.echo(f"{fmt}: {n} parsed decks, {cards} distinct cards, avg size {avg}")
 
 
 @deck_app.command("validate")
