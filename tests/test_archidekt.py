@@ -159,6 +159,46 @@ def test_crawl_end_to_end_and_resumability(loaded_conn, data_home):
 
 
 @respx.mock
+def test_fetch_marks_gone_decks_and_continues(loaded_conn, data_home):
+    """A 4xx on one deck (deleted/private) must not kill the crawl."""
+    limiter = RateLimiter(interval=0, jitter=0, sleep=lambda s: None)
+    respx.get(SEARCH_URL).mock(
+        side_effect=[
+            httpx.Response(200, json=_search_page([301, 302])),
+            httpx.Response(200, json=_search_page([])),
+        ]
+    )
+    respx.get(DECK_URL.format(deck_id=301)).mock(return_value=httpx.Response(400))
+    respx.get(DECK_URL.format(deck_id=302)).mock(
+        return_value=httpx.Response(200, json=commander_api_deck(loaded_conn, 302))
+    )
+    outcomes = crawl(
+        loaded_conn, "commander", 10, client=httpx.Client(), limiter=limiter
+    )
+    assert outcomes == {"ok": 1}
+    statuses = dict(loaded_conn.execute("SELECT deck_id, status FROM decks").fetchall())
+    assert statuses == {301: "gone", 302: "parsed"}
+
+
+@respx.mock
+def test_discover_bound_counts_seen_not_inserted(loaded_conn, data_home):
+    """A resumed discovery re-walks known pages; the bound must count seen
+    entries or it would page far past max_decks looking for new ids."""
+    limiter = RateLimiter(interval=0, jitter=0, sleep=lambda s: None)
+    page = respx.get(SEARCH_URL).mock(
+        return_value=httpx.Response(200, json=_search_page([401, 402, 403]))
+    )
+    client = httpx.Client()
+    assert archidekt.discover(loaded_conn, client, limiter, "commander", 3) == 3
+    # all ids already queued: same bound must stop after one page, inserting 0
+    assert archidekt.discover(loaded_conn, client, limiter, "commander", 3) == 0
+    assert page.call_count == 2
+    # max_decks=0 skips discovery entirely (fetch-the-queue-only resume path)
+    assert archidekt.discover(loaded_conn, client, limiter, "commander", 0) == 0
+    assert page.call_count == 2
+
+
+@respx.mock
 def test_get_json_backs_off_on_429():
     sleeps = []
     limiter = RateLimiter(interval=0, jitter=0, sleep=sleeps.append)

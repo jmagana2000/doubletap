@@ -93,11 +93,17 @@ def discover(
     Pages are requested explicitly: the API's `next` link goes null around
     page 100 (~6k decks) but direct page access keeps returning results far
     deeper (verified to page 700), so `next` cannot be trusted for large
-    crawls. Stops on the first empty page."""
+    crawls. Stops on the first empty page.
+
+    The max_decks bound counts entries *seen*, not newly inserted — a resumed
+    crawl re-walks the same pages, and counting inserts would keep it paging
+    until it found max_decks decks it had never seen. max_decks=0 skips
+    discovery entirely (fetch the existing queue only)."""
     fmt_id = FORMAT_IDS[format_name]
     queued = 0
+    seen = 0
     page = 1
-    while queued < max_decks:
+    while seen < max_decks:
         data = get_json(
             client,
             limiter,
@@ -117,7 +123,8 @@ def discover(
                 ),
             )
             queued += cur.rowcount
-            if queued >= max_decks:
+            seen += 1
+            if seen >= max_decks:
                 break
         page += 1
         conn.commit()
@@ -159,7 +166,9 @@ def fetch_queued(
     progress=None,
 ) -> int:
     """Fetch queued decks, appending trimmed records to the raw shard. Resumable:
-    already-fetched decks are never requested again."""
+    already-fetched decks are never requested again. Decks the API refuses with
+    a 4xx (deleted/private) are marked 'gone' and skipped — one dead deck must
+    not kill a large crawl."""
     rows = conn.execute(
         "SELECT deck_id FROM decks WHERE source = 'archidekt' AND format = ? AND status = 'queued'",
         (format_name,),
@@ -167,7 +176,17 @@ def fetch_queued(
     fetched = 0
     path = shard_path(format_name)
     for (deck_id,) in rows:
-        raw = get_json(client, limiter, DECK_URL.format(deck_id=deck_id))
+        try:
+            raw = get_json(client, limiter, DECK_URL.format(deck_id=deck_id))
+        except httpx.HTTPStatusError as e:
+            if 400 <= e.response.status_code < 500:
+                conn.execute(
+                    "UPDATE decks SET status = 'gone', fetched_at = datetime('now') WHERE deck_id = ?",
+                    (deck_id,),
+                )
+                conn.commit()
+                continue
+            raise
         with gzip.open(path, "at", encoding="utf-8") as f:
             f.write(json.dumps(trim_deck(raw, format_name), ensure_ascii=False) + "\n")
         conn.execute(
