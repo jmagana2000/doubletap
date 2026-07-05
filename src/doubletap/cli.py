@@ -117,6 +117,45 @@ def corpus_crawl(
     typer.echo(f"parse outcomes: {dict(outcomes)}")
 
 
+@corpus_app.command("pmi")
+def corpus_pmi(
+    deck_format: str = typer.Option(..., "--format", "-f"),
+    min_count: int = typer.Option(20, help="Minimum decks a pair must share"),
+    top: int = typer.Option(20, help="Top synergy pairs to display"),
+):
+    """Build the smoothed PPMI synergy table for a format and show top pairs."""
+    from .ml import data as ml_data
+    from .ml import reward as ml_reward
+
+    conn = db.connect()
+    fmt = formats.get_format(deck_format)
+    vocab = ml_data.build_vocab(conn, fmt)
+    corpus = ml_data.load_corpus(conn, vocab, fmt)
+    if not corpus:
+        typer.echo("No parsed decks for this format; run corpus crawl first.", err=True)
+        raise typer.Exit(code=1)
+    pmi = ml_reward.build_pmi(
+        ml_reward.corpus_card_sets(corpus), len(vocab), min_count=min_count
+    )
+    out = db.data_home() / "models"
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"pmi_{fmt.name}.npz"
+    pmi.save(path)
+    typer.echo(
+        f"{len(corpus)} decks, {len(pmi.pairs)} PPMI pairs (min_count={min_count}) -> {path}"
+    )
+
+    def card_name(idx):
+        (name,) = conn.execute(
+            "SELECT name FROM cards WHERE oracle_id = ?", (vocab.oracle_ids[idx],)
+        ).fetchone()
+        return name
+
+    best = sorted(pmi.pairs.items(), key=lambda kv: -kv[1])[:top]
+    for (a, b), value in best:
+        typer.echo(f"{value:5.2f}  {card_name(a)}  +  {card_name(b)}")
+
+
 @corpus_app.command("stats")
 def corpus_stats():
     """Corpus size and coverage by format."""
