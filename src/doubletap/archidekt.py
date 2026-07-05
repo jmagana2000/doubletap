@@ -66,10 +66,15 @@ def get_json(
     params: dict | None = None,
     max_retries: int = 5,
 ):
-    """GET with rate limiting and exponential backoff on 429/5xx; hard stop after retries."""
+    """GET with rate limiting and exponential backoff on 429/5xx and transport
+    failures (dropped connections, timeouts); hard stop after retries."""
     for attempt in range(max_retries):
         limiter.wait()
-        resp = client.get(url, params=params)
+        try:
+            resp = client.get(url, params=params)
+        except httpx.TransportError:
+            limiter.sleep(2**attempt)
+            continue
         if resp.status_code == 429 or resp.status_code >= 500:
             limiter.sleep(2**attempt)
             continue

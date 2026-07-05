@@ -215,6 +215,23 @@ def test_get_json_backs_off_on_429():
 
 
 @respx.mock
+def test_get_json_retries_transport_errors():
+    """Dropped connections mid-crawl must retry, not kill the run."""
+    sleeps = []
+    limiter = RateLimiter(interval=0, jitter=0, sleep=sleeps.append)
+    route = respx.get("https://archidekt.com/api/thing")
+    route.side_effect = [
+        httpx.RemoteProtocolError("Server disconnected"),
+        httpx.ConnectError("boom"),
+        httpx.Response(200, json={"ok": True}),
+    ]
+    assert get_json(httpx.Client(), limiter, "https://archidekt.com/api/thing") == {
+        "ok": True
+    }
+    assert sleeps == [1, 2]
+
+
+@respx.mock
 def test_get_json_hard_stops():
     limiter = RateLimiter(interval=0, jitter=0, sleep=lambda s: None)
     respx.get("https://archidekt.com/api/thing").mock(return_value=httpx.Response(429))
