@@ -51,7 +51,7 @@ class Deck:
                 )
             ],
         }
-        path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+        Path(path).write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
 
     @classmethod
     def load(cls, path: Path) -> "Deck":
