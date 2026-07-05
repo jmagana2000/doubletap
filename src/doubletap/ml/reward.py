@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from itertools import combinations
 from pathlib import Path
 
 import numpy as np
@@ -63,26 +62,36 @@ def build_pmi(
     min_count: int = 20,
     alpha: float = 0.75,
 ) -> PMIModel:
-    """deck_card_sets: one array of distinct card indices per deck."""
+    """deck_card_sets: one array of distinct card indices per deck.
+
+    Pair counting is vectorized: pairs are encoded as a*vocab_size+b int64
+    keys and tallied with one np.unique pass. A tens-of-thousands-deck corpus
+    generates ~10^7-10^8 pair occurrences, which a Python dict cannot hold."""
     n_decks = len(deck_card_sets)
     doc_freq = np.zeros(vocab_size, dtype=np.int64)
-    pair_counts: dict[tuple[int, int], int] = {}
+    key_chunks = []
     for cards in deck_card_sets:
-        distinct = np.unique(cards)
+        distinct = np.unique(cards)  # sorted, so i < j gives a < b
         doc_freq[distinct] += 1
-        for a, b in combinations(sorted(int(c) for c in distinct), 2):
-            pair_counts[(a, b)] = pair_counts.get((a, b), 0) + 1
+        i, j = np.triu_indices(distinct.size, k=1)
+        key_chunks.append(distinct[i] * vocab_size + distinct[j])
+    keys, counts = (
+        np.unique(np.concatenate(key_chunks), return_counts=True)
+        if key_chunks
+        else (np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64))
+    )
+    keep = counts >= min_count
+    keys, counts = keys[keep], counts[keep]
 
     p_alpha = doc_freq.astype(np.float64) ** alpha
     p_alpha /= p_alpha.sum() or 1.0
-    pairs = {}
-    for (a, b), count in pair_counts.items():
-        if count < min_count:
-            continue
-        p_ab = count / n_decks
-        value = np.log(p_ab) - np.log(p_alpha[a]) - np.log(p_alpha[b])
-        if value > 0:
-            pairs[(a, b)] = float(value)
+    a, b = keys // vocab_size, keys % vocab_size
+    values = np.log(counts / n_decks) - np.log(p_alpha[a]) - np.log(p_alpha[b])
+    positive = values > 0
+    pairs = {
+        (int(x), int(y)): float(v)
+        for x, y, v in zip(a[positive], b[positive], values[positive])
+    }
     return PMIModel(n_decks=n_decks, doc_freq=doc_freq, pairs=pairs)
 
 
