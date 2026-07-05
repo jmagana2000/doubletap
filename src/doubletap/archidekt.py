@@ -86,14 +86,28 @@ def discover(
     limiter: RateLimiter,
     format_name: str,
     max_decks: int,
+    order_by: str = "-viewCount",
 ) -> int:
-    """Queue deck ids from the search API (most-viewed first). Idempotent."""
+    """Queue deck ids from the search API. Idempotent.
+
+    Pages are requested explicitly: the API's `next` link goes null around
+    page 100 (~6k decks) but direct page access keeps returning results far
+    deeper (verified to page 700), so `next` cannot be trusted for large
+    crawls. Stops on the first empty page."""
     fmt_id = FORMAT_IDS[format_name]
     queued = 0
-    url, params = SEARCH_URL, {"deckFormat": fmt_id, "orderBy": "-viewCount"}
-    while queued < max_decks and url:
-        data = get_json(client, limiter, url, params=params)
-        for entry in data.get("results", []):
+    page = 1
+    while queued < max_decks:
+        data = get_json(
+            client,
+            limiter,
+            SEARCH_URL,
+            params={"deckFormat": fmt_id, "orderBy": order_by, "page": page},
+        )
+        results = data.get("results", [])
+        if not results:
+            break
+        for entry in results:
             cur = conn.execute(
                 "INSERT OR IGNORE INTO decks (deck_id, source, format, url, status) VALUES (?, 'archidekt', ?, ?, 'queued')",
                 (
@@ -105,7 +119,7 @@ def discover(
             queued += cur.rowcount
             if queued >= max_decks:
                 break
-        url, params = data.get("next"), None
+        page += 1
         conn.commit()
     return queued
 
@@ -251,13 +265,14 @@ def crawl(
     client: httpx.Client | None = None,
     limiter: RateLimiter | None = None,
     progress=None,
+    order_by: str = "-viewCount",
 ) -> Counter:
     get_format(format_name)  # fail fast on unknown formats
     own_client = client is None
     client = client or make_client()
     limiter = limiter or RateLimiter()
     try:
-        discover(conn, client, limiter, format_name, max_decks)
+        discover(conn, client, limiter, format_name, max_decks, order_by=order_by)
         fetch_queued(conn, client, limiter, format_name, progress=progress)
         return parse_shards(conn, format_name)
     finally:

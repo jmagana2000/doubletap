@@ -111,24 +111,22 @@ def test_parse_rejects_invalid_deck(loaded_conn):
     assert deck is None and reason == "invalid"
 
 
-def _search_page(entries, next_url=None):
-    return {
-        "count": len(entries),
-        "next": next_url,
-        "results": [{"id": e} for e in entries],
-    }
+def _search_page(entries):
+    # `next` is deliberately absent: discovery paginates by explicit page
+    # number and must stop on the first empty page, not on a null next link
+    return {"count": len(entries), "results": [{"id": e} for e in entries]}
 
 
 @respx.mock
 def test_crawl_end_to_end_and_resumability(loaded_conn, data_home):
     limiter = RateLimiter(interval=0, jitter=0, sleep=lambda s: None)
-    page2 = "https://archidekt.com/api/decks/v3/?page=2"
-    # both pages share the URL path, so one route serves them in order
+    # all pages share the URL path, so one route serves them in order
     # (twice: crawl() is called again below to prove resumability)
     respx.get(SEARCH_URL).mock(
         side_effect=[
-            httpx.Response(200, json=_search_page([101], page2)),
+            httpx.Response(200, json=_search_page([101])),
             httpx.Response(200, json=_search_page([102])),
+            httpx.Response(200, json=_search_page([])),
         ]
         * 2
     )

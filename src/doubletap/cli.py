@@ -107,6 +107,9 @@ def deck_import(
 def corpus_crawl(
     deck_format: str = typer.Option(..., "--format", "-f"),
     max_decks: int = typer.Option(1000, "--max", help="Deck ids to queue this run"),
+    order_by: str = typer.Option(
+        "-viewCount", help="Search ordering; different orderings reach different decks"
+    ),
 ):
     """Crawl public Archidekt decks (rate-limited, resumable) into the corpus."""
     conn = db.connect()
@@ -115,7 +118,9 @@ def corpus_crawl(
         if done % 25 == 0 or done == total:
             typer.echo(f"fetched {done}/{total}")
 
-    outcomes = archidekt.crawl(conn, deck_format, max_decks, progress=progress)
+    outcomes = archidekt.crawl(
+        conn, deck_format, max_decks, progress=progress, order_by=order_by
+    )
     typer.echo(f"parse outcomes: {dict(outcomes)}")
 
 
