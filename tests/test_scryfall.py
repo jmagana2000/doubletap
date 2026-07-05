@@ -8,6 +8,7 @@ import respx
 from doubletap import scryfall
 
 FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURE_COUNT = len((FIXTURES / "oracle-cards.jsonl").read_text().splitlines())
 
 DOWNLOAD_URL = "https://data.scryfall.io/oracle-cards/test.jsonl.gz"
 CATALOG = {
@@ -39,12 +40,12 @@ def test_sync_loads_skips_and_forces(conn):
 
     result = scryfall.sync(conn, client=client)
     assert result.updated
-    assert result.card_count == 11
+    assert result.card_count == FIXTURE_COUNT
     assert download.call_count == 1
 
     result = scryfall.sync(conn, client=client)
     assert not result.updated
-    assert result.card_count == 11
+    assert result.card_count == FIXTURE_COUNT
     assert download.call_count == 1  # no re-download when updated_at matches
 
     result = scryfall.sync(conn, client=client, force=True)
@@ -53,9 +54,9 @@ def test_sync_loads_skips_and_forces(conn):
 
 
 def test_load_cards_is_a_full_rebuild(conn, fixture_bulk_gz):
-    assert scryfall.load_cards(conn, fixture_bulk_gz) == 11
-    assert scryfall.load_cards(conn, fixture_bulk_gz) == 11
-    assert conn.execute("SELECT COUNT(*) FROM cards").fetchone()[0] == 11
+    assert scryfall.load_cards(conn, fixture_bulk_gz) == FIXTURE_COUNT
+    assert scryfall.load_cards(conn, fixture_bulk_gz) == FIXTURE_COUNT
+    assert conn.execute("SELECT COUNT(*) FROM cards").fetchone()[0] == FIXTURE_COUNT
 
 
 def test_multiface_names_indexed(loaded_conn):

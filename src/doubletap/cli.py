@@ -3,7 +3,7 @@ from pathlib import Path
 
 import typer
 
-from . import db, decks, names, scryfall
+from . import db, decks, formats, names, scryfall
 
 app = typer.Typer(no_args_is_help=True)
 cards_app = typer.Typer(no_args_is_help=True, help="Local Scryfall card cache")
@@ -95,3 +95,17 @@ def deck_import(
     if out:
         deck.save(conn, out)
         typer.echo(f"Wrote {out}")
+
+
+@deck_app.command("validate")
+def deck_validate(path: Path = typer.Argument(..., exists=True, readable=True)):
+    """Check a deck JSON against its format's construction and legality rules."""
+    conn = db.connect()
+    deck = decks.Deck.load(path)
+    violations = formats.validate(conn, deck)
+    if not violations:
+        typer.echo(f"Valid {deck.format} deck ({deck.size()} cards)")
+        return
+    for v in violations:
+        typer.echo(f"{v.code:16} {v.message}")
+    raise typer.Exit(code=1)
