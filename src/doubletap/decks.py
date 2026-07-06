@@ -26,9 +26,14 @@ class Deck:
     format: str
     entries: Counter = field(default_factory=Counter)  # oracle_id -> qty
     commander: str | None = None  # oracle_id
+    partner: str | None = None  # oracle_id; set only for partner-commander pairs
 
     def size(self) -> int:
-        return sum(self.entries.values()) + (1 if self.commander else 0)
+        return (
+            sum(self.entries.values())
+            + (1 if self.commander else 0)
+            + (1 if self.partner else 0)
+        )
 
     def save(self, conn: sqlite3.Connection, path: Path) -> None:
         def named(oracle_id):
@@ -42,6 +47,11 @@ class Deck:
             "commander": (
                 {"oracle_id": self.commander, "name": named(self.commander)}
                 if self.commander
+                else None
+            ),
+            "partner": (
+                {"oracle_id": self.partner, "name": named(self.partner)}
+                if self.partner
                 else None
             ),
             "cards": [
@@ -59,6 +69,8 @@ class Deck:
         deck = cls(format=doc["format"])
         if doc.get("commander"):
             deck.commander = doc["commander"]["oracle_id"]
+        if doc.get("partner"):
+            deck.partner = doc["partner"]["oracle_id"]
         for card in doc["cards"]:
             deck.entries[card["oracle_id"]] += card["qty"]
         return deck
@@ -192,7 +204,10 @@ def resolve(
         buckets[status].append(LineResult(line, status, matches))
         if status in ("resolved", "assumed"):
             if line.is_commander:
-                result.deck.commander = matches[0].oracle_id
+                if result.deck.commander is None:
+                    result.deck.commander = matches[0].oracle_id
+                else:
+                    result.deck.partner = matches[0].oracle_id
             else:
                 result.deck.entries[matches[0].oracle_id] += line.qty
     return result

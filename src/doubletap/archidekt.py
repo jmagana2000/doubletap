@@ -236,9 +236,26 @@ def parse_trimmed(conn: sqlite3.Connection, trimmed: dict) -> tuple[Deck | None,
     if unresolved / total > MAX_UNRESOLVED_FRACTION:
         return None, "unresolved_cards"
     if fmt.requires_commander:
-        if len(commanders) != 1:  # partners/companions are out of scope in v1
+        if len(commanders) == 1:
+            deck.commander = commanders[0]
+        elif len(commanders) == 2:
+            # Accept partner commanders: both must carry a Partner keyword
+            def _has_partner(oid):
+                row = conn.execute(
+                    "SELECT json FROM cards WHERE oracle_id = ?", (oid,)
+                ).fetchone()
+                if not row:
+                    return False
+                card = json.loads(row[0])
+                return any(k.startswith("Partner") for k in card.get("keywords", []))
+
+            if _has_partner(commanders[0]) and _has_partner(commanders[1]):
+                deck.commander = commanders[0]
+                deck.partner = commanders[1]
+            else:
+                return None, "commander_count"
+        else:
             return None, "commander_count"
-        deck.commander = commanders[0]
     elif commanders:
         return None, "unexpected_commander"
     if validate(conn, deck):
@@ -266,18 +283,19 @@ def parse_shards(conn: sqlite3.Connection, format_name: str) -> Counter:
                 )
                 continue
             conn.execute(
-                "UPDATE decks SET status = 'parsed', commander_oracle_id = ? WHERE deck_id = ?",
-                (deck.commander, deck_id),
+                "UPDATE decks SET status = 'parsed', commander_oracle_id = ?, partner_oracle_id = ? WHERE deck_id = ?",
+                (deck.commander, deck.partner, deck_id),
             )
             conn.executemany(
                 "INSERT OR REPLACE INTO deck_cards (deck_id, oracle_id, qty) VALUES (?, ?, ?)",
                 [(deck_id, oid, qty) for oid, qty in deck.entries.items()],
             )
-            if deck.commander:
-                conn.execute(
-                    "INSERT OR REPLACE INTO deck_cards (deck_id, oracle_id, qty) VALUES (?, ?, 1)",
-                    (deck_id, deck.commander),
-                )
+            for cmd_oid in (deck.commander, deck.partner):
+                if cmd_oid:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO deck_cards (deck_id, oracle_id, qty) VALUES (?, ?, 1)",
+                        (deck_id, cmd_oid),
+                    )
     conn.commit()
     return outcomes
 

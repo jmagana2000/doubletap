@@ -12,6 +12,7 @@ def score_state(
     fmt: FormatConfig,
     partial_idxs: np.ndarray,
     commander_idx: int | None,
+    partner_idx: int | None = None,
 ) -> np.ndarray:
     """Scores over the full vocab for one state; illegal actions are -inf."""
     with torch.no_grad():
@@ -19,10 +20,10 @@ def score_state(
         offsets = torch.zeros(1, dtype=torch.int64)
         commander = torch.tensor([commander_idx if commander_idx is not None else -1])
         feats = torch.from_numpy(
-            state_features(vocab, fmt, partial_idxs, commander_idx)
+            state_features(vocab, fmt, partial_idxs, commander_idx, partner_idx)
         ).unsqueeze(0)
         state = model.state_repr(bag, offsets, commander, feats)[0]
-        mask = action_mask(vocab, fmt, partial_idxs, commander_idx)
+        mask = action_mask(vocab, fmt, partial_idxs, commander_idx, partner_idx)
         pool = np.flatnonzero(mask)
         scores = np.full(len(vocab), -np.inf, dtype=np.float32)
         scores[pool] = model.score_pool(state, torch.from_numpy(pool)).numpy()
@@ -35,6 +36,7 @@ def complete_deck(
     fmt: FormatConfig,
     partial_idxs: np.ndarray,
     commander_idx: int | None,
+    partner_idx: int | None = None,
 ) -> tuple[list[int], np.ndarray]:
     """Greedily fill the deck's nonland slots (deck size minus the land-target
     slots), re-scoring after each add. Lands stay the user's job. Returns
@@ -44,14 +46,16 @@ def complete_deck(
     target_nonland = fmt.deck_size - round(fmt.land_fraction_target * fmt.deck_size)
     if commander_idx is not None:
         target_nonland -= 1  # the commander occupies a nonland slot
+    if partner_idx is not None:
+        target_nonland -= 1  # partner also occupies a nonland slot
     partial = partial_idxs.copy()
     added: list[int] = []
-    committed = 1 if commander_idx is not None else 0
+    committed = sum(1 for x in (commander_idx, partner_idx) if x is not None)
     while (
         int((~vocab.land[partial]).sum()) < target_nonland
         and partial.size + committed < fmt.deck_size
     ):
-        scores = score_state(model, vocab, fmt, partial, commander_idx)
+        scores = score_state(model, vocab, fmt, partial, commander_idx, partner_idx)
         best = int(np.argmax(scores))
         if not np.isfinite(scores[best]):
             break
@@ -86,7 +90,9 @@ def recovery_at_k(
         partial = deck.main_idxs[keep]
         hidden = np.unique(deck.main_idxs[hidden_pos])
 
-        scores = score_state(model, vocab, fmt, partial, deck.commander_idx)
+        scores = score_state(
+            model, vocab, fmt, partial, deck.commander_idx, deck.partner_idx
+        )
         order = np.argsort(-scores)
         for k in ks:
             top = order[:k]

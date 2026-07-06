@@ -84,11 +84,37 @@ def test_parse_modern_deck_drops_sideboard(loaded_conn):
     assert oid(loaded_conn, "Relentless Rats") not in deck.entries
 
 
-def test_parse_rejects_partner_commanders(loaded_conn):
+def test_parse_rejects_non_partner_multi_commanders(loaded_conn):
+    # Two commanders where neither has the Partner keyword → commander_count
     raw = commander_api_deck(loaded_conn)
     raw["cards"].append(api_card(loaded_conn, "Juzám Djinn", 1, ["Commander"]))
     deck, reason = parse_trimmed(loaded_conn, _trim(loaded_conn, raw, "commander"))
     assert deck is None and reason == "commander_count"
+
+
+def partner_api_deck(conn, deck_id=501):
+    return {
+        "id": deck_id,
+        "name": "partner deck",
+        "deckFormat": 3,
+        "cards": [
+            api_card(conn, "Thrasios, Triton Hero", 1, ["Commander"]),
+            api_card(conn, "Tymna the Weaver", 1, ["Commander"]),
+            api_card(conn, "Sol Ring", 1, ["Artifact"]),
+            api_card(conn, "Juzám Djinn", 1, ["Creature"]),
+            api_card(conn, "Swamp", 96, ["Land"]),
+        ],
+    }
+
+
+def test_parse_accepts_partner_commanders(loaded_conn):
+    deck, reason = parse_trimmed(
+        loaded_conn, _trim(loaded_conn, partner_api_deck(loaded_conn), "commander")
+    )
+    assert reason == "ok"
+    assert deck.commander == oid(loaded_conn, "Thrasios, Triton Hero")
+    assert deck.partner == oid(loaded_conn, "Tymna the Weaver")
+    assert deck.size() == 100  # 2 commanders + 1 Sol Ring + 1 Djinn + 96 Swamps
 
 
 def test_parse_rejects_unresolvable_cards(loaded_conn):

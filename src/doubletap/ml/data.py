@@ -93,18 +93,27 @@ def action_mask(
     fmt: FormatConfig,
     partial_idxs: np.ndarray,
     commander_idx: int | None,
+    partner_idx: int | None = None,
 ) -> np.ndarray:
     """Legal next-card mask over the vocab: nonland only (mana bases are handled
-    by the gap report, not the model), copy limits, commander color identity."""
+    by the gap report, not the model), copy limits, commander color identity.
+    For partner commanders, the combined identity of both is used."""
     mask = ~vocab.land
     if partial_idxs.size:
         idxs, counts = np.unique(partial_idxs, return_counts=True)
         at_limit = idxs[(counts >= fmt.copy_limit) & ~vocab.any_number[idxs]]
         mask[at_limit] = False
-    if commander_idx is not None:
-        commander_bits = vocab.identity_bits[commander_idx]
-        mask &= (vocab.identity_bits & ~commander_bits) == 0
-        mask[commander_idx] = False
+    if commander_idx is not None or partner_idx is not None:
+        combined_bits = np.uint8(0)
+        if commander_idx is not None:
+            combined_bits = combined_bits | vocab.identity_bits[commander_idx]
+        if partner_idx is not None:
+            combined_bits = combined_bits | vocab.identity_bits[partner_idx]
+        mask &= (vocab.identity_bits & ~combined_bits) == 0
+        if commander_idx is not None:
+            mask[commander_idx] = False
+        if partner_idx is not None:
+            mask[partner_idx] = False
     return mask
 
 
@@ -113,6 +122,7 @@ def state_features(
     fmt: FormatConfig,
     partial_idxs: np.ndarray,
     commander_idx: int | None,
+    partner_idx: int | None = None,
 ) -> np.ndarray:
     feats = np.zeros(STATE_DIM, dtype=np.float32)
     if partial_idxs.size:
@@ -121,8 +131,12 @@ def state_features(
         feats[0:9] = hist / fmt.deck_size
         feats[9] = vocab.land[partial_idxs].sum() / fmt.deck_size
         feats[10] = partial_idxs.size / fmt.deck_size
-    if commander_idx is not None:
-        bits = int(vocab.identity_bits[commander_idx])
+    if commander_idx is not None or partner_idx is not None:
+        bits = 0
+        if commander_idx is not None:
+            bits |= int(vocab.identity_bits[commander_idx])
+        if partner_idx is not None:
+            bits |= int(vocab.identity_bits[partner_idx])
         feats[11:16] = [(bits >> i) & 1 for i in range(5)]
     return feats
 
@@ -131,8 +145,9 @@ def state_features(
 class CorpusDeck:
     deck_id: int
     commander_idx: int | None
-    main_idxs: np.ndarray  # all main-deck cards expanded by qty (commander excluded)
+    main_idxs: np.ndarray  # all main-deck cards expanded by qty (commanders excluded)
     nonland_positions: np.ndarray  # positions in main_idxs holding nonland cards
+    partner_idx: int | None = None
 
 
 def load_corpus(
@@ -140,17 +155,19 @@ def load_corpus(
 ) -> list[CorpusDeck]:
     decks = []
     rows = conn.execute(
-        "SELECT deck_id, commander_oracle_id FROM decks WHERE status = 'parsed' AND format = ?",
+        "SELECT deck_id, commander_oracle_id, partner_oracle_id FROM decks WHERE status = 'parsed' AND format = ?",
         (fmt.name,),
     ).fetchall()
-    for deck_id, commander_oid in rows:
+    for deck_id, commander_oid, partner_oid in rows:
         commander_idx = vocab.index.get(commander_oid) if commander_oid else None
+        partner_idx = vocab.index.get(partner_oid) if partner_oid else None
+        commander_oids = {o for o in (commander_oid, partner_oid) if o}
         main = []
         ok = True
         for oid, qty in conn.execute(
             "SELECT oracle_id, qty FROM deck_cards WHERE deck_id = ?", (deck_id,)
         ):
-            if oid == commander_oid:
+            if oid in commander_oids:
                 continue
             idx = vocab.index.get(oid)
             if idx is None:  # legality changed since the crawl
@@ -166,6 +183,7 @@ def load_corpus(
                 commander_idx=commander_idx,
                 main_idxs=main_idxs,
                 nonland_positions=np.flatnonzero(~vocab.land[main_idxs]),
+                partner_idx=partner_idx,
             )
         )
     return decks
@@ -213,10 +231,16 @@ def sample_batch(
         bags.append(partial)
         offsets.append(offset)
         offset += partial.size
-        sf.append(state_features(vocab, fmt, partial, deck.commander_idx))
+        sf.append(
+            state_features(vocab, fmt, partial, deck.commander_idx, deck.partner_idx)
+        )
         if with_next:
             next_partial = np.append(partial, target)
-            nsf.append(state_features(vocab, fmt, next_partial, deck.commander_idx))
+            nsf.append(
+                state_features(
+                    vocab, fmt, next_partial, deck.commander_idx, deck.partner_idx
+                )
+            )
         actions.append(target)
         commanders.append(deck.commander_idx if deck.commander_idx is not None else -1)
         dones.append(1.0 if k + 1 == n else 0.0)

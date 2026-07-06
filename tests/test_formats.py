@@ -101,3 +101,48 @@ def test_missing_and_invalid_commander(loaded_conn):
     deck.commander = oid(loaded_conn, "Sol Ring")
     deck.entries[oid(loaded_conn, "Swamp")] = 99
     assert "invalid_commander" in codes(validate(loaded_conn, deck))
+
+
+def test_valid_partner_commander_deck(loaded_conn):
+    # Thrasios (UG) + Tymna (WB) → combined identity WUBG
+    # Juzám Djinn (B) and Sol Ring (colorless) are within WUBG
+    deck = Deck(
+        format="commander",
+        commander=oid(loaded_conn, "Thrasios, Triton Hero"),
+        partner=oid(loaded_conn, "Tymna the Weaver"),
+        entries=Counter(
+            {
+                oid(loaded_conn, "Sol Ring"): 1,
+                oid(loaded_conn, "Juzám Djinn"): 1,
+                oid(loaded_conn, "Swamp"): 96,
+            }
+        ),
+    )
+    assert validate(loaded_conn, deck) == []
+
+
+def test_partner_rejects_card_outside_combined_identity(loaded_conn):
+    # Lightning Bolt is Red — outside Thrasios+Tymna's WUBG identity
+    deck = Deck(
+        format="commander",
+        commander=oid(loaded_conn, "Thrasios, Triton Hero"),
+        partner=oid(loaded_conn, "Tymna the Weaver"),
+        entries=Counter(
+            {
+                oid(loaded_conn, "Lightning Bolt"): 1,
+                oid(loaded_conn, "Swamp"): 96,
+            }
+        ),
+    )
+    assert "color_identity" in codes(validate(loaded_conn, deck))
+
+
+def test_partner_requires_partner_keyword(loaded_conn):
+    # Atraxa has no Partner keyword — pairing with Thrasios is invalid
+    deck = Deck(
+        format="commander",
+        commander=oid(loaded_conn, "Thrasios, Triton Hero"),
+        partner=oid(loaded_conn, "Atraxa, Praetors' Voice"),
+        entries=Counter({oid(loaded_conn, "Swamp"): 97}),
+    )
+    assert "invalid_partner" in codes(validate(loaded_conn, deck))

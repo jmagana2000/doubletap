@@ -88,6 +88,10 @@ def can_be_commander(card: dict) -> bool:
     return "can be your commander" in card.get("oracle_text", "")
 
 
+def has_partner_keyword(card: dict) -> bool:
+    return any(k.startswith("Partner") for k in card.get("keywords", []))
+
+
 def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
     fmt = get_format(deck.format)
     violations = []
@@ -110,6 +114,7 @@ def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
         )
 
     identity = None
+    commander_oids: set[str] = set()
     if fmt.requires_commander:
         if deck.commander is None:
             violations.append(
@@ -118,6 +123,7 @@ def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
         else:
             commander = get_card(conn, deck.commander)
             cards[deck.commander] = commander
+            commander_oids.add(deck.commander)
             if not can_be_commander(commander):
                 violations.append(
                     Violation(
@@ -127,6 +133,29 @@ def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
                     )
                 )
             identity = set(commander.get("color_identity", []))
+
+            if deck.partner is not None:
+                partner = get_card(conn, deck.partner)
+                cards[deck.partner] = partner
+                commander_oids.add(deck.partner)
+                if not can_be_commander(partner):
+                    violations.append(
+                        Violation(
+                            "invalid_commander",
+                            f"{partner['name']} cannot be a commander",
+                            deck.partner,
+                        )
+                    )
+                if not has_partner_keyword(commander) or not has_partner_keyword(
+                    partner
+                ):
+                    violations.append(
+                        Violation(
+                            "invalid_partner",
+                            "Both commanders must have the Partner keyword to use partner commanders",
+                        )
+                    )
+                identity |= set(partner.get("color_identity", []))
 
     for oid, card in cards.items():
         status = card["legalities"].get(fmt.legality_key, "not_legal")
@@ -158,7 +187,7 @@ def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
 
     if identity is not None:
         for oid, card in cards.items():
-            if oid == deck.commander:
+            if oid in commander_oids:
                 continue
             if not set(card.get("color_identity", [])) <= identity:
                 violations.append(

@@ -296,7 +296,8 @@ def _deck_to_idxs(conn, deck, vocab, fmt):
             continue
         partial.extend([idx] * qty)
     commander_idx = vocab.index.get(deck.commander) if deck.commander else None
-    return np.array(partial, dtype=np.int64), commander_idx
+    partner_idx = vocab.index.get(deck.partner) if deck.partner else None
+    return np.array(partial, dtype=np.int64), commander_idx, partner_idx
 
 
 def _card_name(conn, vocab, idx):
@@ -347,9 +348,9 @@ def recommend(
     vocab, model, ckpt, model_path = _load_model(conn, fmt, model_path)
     pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
     pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
-    partial, commander_idx = _deck_to_idxs(conn, deck, vocab, fmt)
+    partial, commander_idx, partner_idx = _deck_to_idxs(conn, deck, vocab, fmt)
 
-    scores = score_state(model, vocab, fmt, partial, commander_idx)
+    scores = score_state(model, vocab, fmt, partial, commander_idx, partner_idx)
     label = f"{ckpt['algo']} model, {model_path.name}"
     if personalize > 0:
         freqs = neighbor_frequencies(conn, vocab, fmt, partial)
@@ -387,9 +388,9 @@ def complete(
     deck = decks.Deck.load(deck_path)
     fmt = formats.get_format(deck.format)
     vocab, model, ckpt, model_path = _load_model(conn, fmt, model_path)
-    partial, commander_idx = _deck_to_idxs(conn, deck, vocab, fmt)
+    partial, commander_idx, partner_idx = _deck_to_idxs(conn, deck, vocab, fmt)
 
-    added, final = complete_deck(model, vocab, fmt, partial, commander_idx)
+    added, final = complete_deck(model, vocab, fmt, partial, commander_idx, partner_idx)
     for idx in added:
         deck.entries[vocab.oracle_ids[idx]] += 1
         typer.echo(f"+ {_card_name(conn, vocab, idx)}")

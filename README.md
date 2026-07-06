@@ -66,6 +66,11 @@ Lookup is diacritics-insensitive and face-aware: `malakir rebirth` finds the
 MDFC "Malakir Rebirth // Malakir Mire", and face-name collisions (a card face
 named "Lightning Bolt") never shadow the real card.
 
+The `score` field in lookup output is fuzzy string-match confidence (0–100).
+A score of 100 means the normalized query matched the card name exactly; lower
+scores are rapidfuzz `WRatio` similarity — higher = closer string. It has no
+relation to card power or synergy. Candidates below 60 are dropped.
+
 ### Deck import
 
 ```bash
@@ -111,6 +116,20 @@ re-requested, and trimmed raw responses are kept in
 `~/.doubletap/corpus/raw/*.jsonl.gz` so tables can be rebuilt without
 re-crawling. Only decks that pass full format validation enter the corpus
 (partner commanders and >2%-unresolvable decks are rejected).
+
+`corpus stats` shows a per-format breakdown with three status values:
+
+| Status | Meaning |
+|---|---|
+| `parsed` | Passed all filters — in the training corpus |
+| `rejected` | Fetched but failed a parse-time filter |
+| `gone` | Server returned 4xx (deleted/private deck) — skipped permanently |
+
+Common rejection reasons: >2% unresolvable card names (proxies/custom cards),
+partner commanders (v1 out-of-scope), wrong deck size, banned cards, or
+color-identity violations. Commander typically rejects ~50% of fetched decks
+because of how strictly the 100-card singleton + color-identity rules are
+enforced.
 
 For a large crawl, keep the machine awake:
 

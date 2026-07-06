@@ -53,4 +53,9 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA busy_timeout = 30000")  # concurrent crawlers share the db
     conn.executescript(SCHEMA)
+    try:
+        conn.execute("ALTER TABLE decks ADD COLUMN partner_oracle_id TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # column already exists
     return conn
