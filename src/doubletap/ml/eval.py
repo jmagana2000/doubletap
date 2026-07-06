@@ -29,6 +29,37 @@ def score_state(
     return scores
 
 
+def complete_deck(
+    model: TwoTowerQ,
+    vocab: Vocab,
+    fmt: FormatConfig,
+    partial_idxs: np.ndarray,
+    commander_idx: int | None,
+) -> tuple[list[int], np.ndarray]:
+    """Greedily fill the deck's nonland slots (deck size minus the land-target
+    slots), re-scoring after each add. Lands stay the user's job. Returns
+    (added indices in order, final partial).
+
+    Stops early if every remaining action is masked (tiny legal pools)."""
+    target_nonland = fmt.deck_size - round(fmt.land_fraction_target * fmt.deck_size)
+    if commander_idx is not None:
+        target_nonland -= 1  # the commander occupies a nonland slot
+    partial = partial_idxs.copy()
+    added: list[int] = []
+    committed = 1 if commander_idx is not None else 0
+    while (
+        int((~vocab.land[partial]).sum()) < target_nonland
+        and partial.size + committed < fmt.deck_size
+    ):
+        scores = score_state(model, vocab, fmt, partial, commander_idx)
+        best = int(np.argmax(scores))
+        if not np.isfinite(scores[best]):
+            break
+        added.append(best)
+        partial = np.append(partial, best)
+    return added, partial
+
+
 def recovery_at_k(
     model: TwoTowerQ,
     decks: list[CorpusDeck],

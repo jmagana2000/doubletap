@@ -257,35 +257,18 @@ def eval_cmd(
     typer.echo(f"{ckpt['algo']} {fmt.name}: {metrics}")
 
 
-@app.command("recommend")
-def recommend(
-    deck_path: Path = typer.Option(..., "--deck", exists=True, readable=True),
-    k: int = typer.Option(20, "-k", help="Number of suggestions"),
-    model_path: Path = typer.Option(
-        None,
-        "--model",
-        help="Checkpoint; defaults to cql_<format>.pt, falling back to bc_<format>.pt",
-    ),
-):
-    """Suggest the top-k additions for a (partial) deck, with synergy rationale
-    and a structural gap report. Lands are handled by the gap report, not the
-    model."""
-    import numpy as np
-
+def _load_model(conn, fmt, model_path: Path | None):
+    """Resolve and load the checkpoint plus its matching vocab. BC ships as
+    default: CQL missed the agreed keep-bar (+2 recovery@50) on the reliable
+    200-deck eval."""
     from .ml.data import build_vocab
-    from .ml.eval import score_state
     from .ml.model import load_checkpoint
-    from .ml.reward import PMIModel
-
-    conn = db.connect()
-    deck = decks.Deck.load(deck_path)
-    fmt = formats.get_format(deck.format)
 
     if model_path is None:
         models_dir = db.data_home() / "models"
         for candidate in (
-            models_dir / f"cql_{fmt.name}.pt",
             models_dir / f"bc_{fmt.name}.pt",
+            models_dir / f"cql_{fmt.name}.pt",
         ):
             if candidate.exists():
                 model_path = candidate
@@ -293,16 +276,18 @@ def recommend(
         if model_path is None:
             typer.echo("No trained model found; run doubletap train first.", err=True)
             raise typer.Exit(code=1)
-
     vocab = build_vocab(conn, fmt)
     model, ckpt = load_checkpoint(model_path, vocab)
-    pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
-    pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
+    return vocab, model, ckpt, model_path
+
+
+def _deck_to_idxs(conn, deck, vocab, fmt):
+    """Map a Deck to vocab indices (expanded by qty), reporting problems."""
+    import numpy as np
 
     for violation in formats.validate(conn, deck):
         if violation.code != "wrong_size":  # partial decks are the normal input
             typer.echo(f"note: {violation.message}")
-
     partial = []
     for oid, qty in deck.entries.items():
         idx = vocab.index.get(oid)
@@ -310,28 +295,18 @@ def recommend(
             typer.echo(f"note: skipping card not legal in {fmt.name} (oracle {oid})")
             continue
         partial.extend([idx] * qty)
-    partial = np.array(partial, dtype=np.int64)
     commander_idx = vocab.index.get(deck.commander) if deck.commander else None
+    return np.array(partial, dtype=np.int64), commander_idx
 
-    def card_name(idx):
-        (name,) = conn.execute(
-            "SELECT name FROM cards WHERE oracle_id = ?", (vocab.oracle_ids[idx],)
-        ).fetchone()
-        return name
 
-    scores = score_state(model, vocab, fmt, partial, commander_idx)
-    top = np.argsort(-scores)[:k]
-    typer.echo(f"Top {k} additions ({ckpt['algo']} model, {model_path.name}):")
-    for rank, idx in enumerate(top, 1):
-        line = f"{rank:3}. {card_name(idx):42} {scores[idx]:7.3f}"
-        if pmi is not None:
-            contributors = pmi.top_contributors(int(idx), partial)
-            if contributors:
-                line += "  with " + ", ".join(
-                    f"{card_name(c)} ({v:.1f})" for c, v in contributors
-                )
-        typer.echo(line)
+def _card_name(conn, vocab, idx):
+    (name,) = conn.execute(
+        "SELECT name FROM cards WHERE oracle_id = ?", (vocab.oracle_ids[idx],)
+    ).fetchone()
+    return name
 
+
+def _structure_report(deck, vocab, fmt, partial):
     size = deck.size()
     n_lands = int(vocab.land[partial].sum())
     land_frac = n_lands / max(size, 1)
@@ -340,6 +315,93 @@ def recommend(
         f"\nStructure: {size}/{fmt.deck_size} cards; {n_lands} lands ({land_frac:.0%})"
         f" vs ~{target_lands} target — mana base is yours to tune."
     )
+
+
+@app.command("recommend")
+def recommend(
+    deck_path: Path = typer.Option(..., "--deck", exists=True, readable=True),
+    k: int = typer.Option(20, "-k", help="Number of suggestions"),
+    model_path: Path = typer.Option(
+        None,
+        "--model",
+        help="Checkpoint; defaults to bc_<format>.pt, falling back to cql_<format>.pt",
+    ),
+    personalize: float = typer.Option(
+        0.3,
+        help="Blend weight for neighbor-deck frequencies (0 = model only): "
+        "cards common in corpus decks similar to yours rank higher",
+    ),
+):
+    """Suggest the top-k additions for a (partial) deck, with synergy rationale
+    and a structural gap report. Lands are handled by the gap report, not the
+    model."""
+    import numpy as np
+
+    from .ml.eval import score_state
+    from .ml.neighbors import blend, neighbor_frequencies
+    from .ml.reward import PMIModel
+
+    conn = db.connect()
+    deck = decks.Deck.load(deck_path)
+    fmt = formats.get_format(deck.format)
+    vocab, model, ckpt, model_path = _load_model(conn, fmt, model_path)
+    pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
+    pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
+    partial, commander_idx = _deck_to_idxs(conn, deck, vocab, fmt)
+
+    scores = score_state(model, vocab, fmt, partial, commander_idx)
+    label = f"{ckpt['algo']} model, {model_path.name}"
+    if personalize > 0:
+        freqs = neighbor_frequencies(conn, vocab, fmt, partial)
+        if freqs is not None:
+            scores = blend(scores, freqs, personalize)
+            label += f", personalize={personalize}"
+
+    top = np.argsort(-scores)[:k]
+    typer.echo(f"Top {k} additions ({label}):")
+    for rank, idx in enumerate(top, 1):
+        line = f"{rank:3}. {_card_name(conn, vocab, idx):42} {scores[idx]:7.3f}"
+        if pmi is not None:
+            contributors = pmi.top_contributors(int(idx), partial)
+            if contributors:
+                line += "  with " + ", ".join(
+                    f"{_card_name(conn, vocab, c)} ({v:.1f})" for c, v in contributors
+                )
+        typer.echo(line)
+    _structure_report(deck, vocab, fmt, partial)
+
+
+@app.command("complete")
+def complete(
+    deck_path: Path = typer.Option(..., "--deck", exists=True, readable=True),
+    out: Path = typer.Option(
+        None, "--out", "-o", help="Write the completed deck as JSON"
+    ),
+    model_path: Path = typer.Option(None, "--model"),
+):
+    """Fill a partial deck's nonland slots with the model's top picks (greedy,
+    re-scored after each add). Lands are reported as a gap, not added."""
+    from .ml.eval import complete_deck
+
+    conn = db.connect()
+    deck = decks.Deck.load(deck_path)
+    fmt = formats.get_format(deck.format)
+    vocab, model, ckpt, model_path = _load_model(conn, fmt, model_path)
+    partial, commander_idx = _deck_to_idxs(conn, deck, vocab, fmt)
+
+    added, final = complete_deck(model, vocab, fmt, partial, commander_idx)
+    for idx in added:
+        deck.entries[vocab.oracle_ids[idx]] += 1
+        typer.echo(f"+ {_card_name(conn, vocab, idx)}")
+    lands_needed = fmt.deck_size - deck.size()
+    typer.echo(
+        f"\nAdded {len(added)} cards ({ckpt['algo']} model); "
+        f"add {lands_needed} lands to reach {fmt.deck_size}."
+    )
+    _structure_report(deck, vocab, fmt, final)
+    if out:
+        deck.save(conn, out)
+        typer.echo(f"Wrote {out}")
 
 
 @deck_app.command("validate")

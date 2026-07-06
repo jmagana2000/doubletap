@@ -5,7 +5,7 @@ torch = pytest.importorskip("torch")
 
 from doubletap.formats import COMMANDER  # noqa: E402
 from doubletap.ml.data import build_vocab, load_corpus, sample_batch  # noqa: E402
-from doubletap.ml.eval import recovery_at_k, score_state  # noqa: E402
+from doubletap.ml.eval import complete_deck, recovery_at_k, score_state  # noqa: E402
 from doubletap.ml.model import TwoTowerQ, load_checkpoint, save_checkpoint  # noqa: E402
 from doubletap.ml.reward import build_pmi, corpus_card_sets  # noqa: E402
 from doubletap.ml.train_bc import bc_loss, sample_negatives, split_corpus  # noqa: E402
@@ -165,6 +165,38 @@ def test_cql_losses_shapes_and_conservative_direction(rigged_conn):
         conservative.backward()
         opt.step()
     assert gap() > before
+
+
+def test_complete_deck_fills_nonland_slots_legally(rigged_conn):
+    vocab = build_vocab(rigged_conn, COMMANDER)
+    model = tiny_model(vocab)
+    atraxa = vocab.index[lookup(rigged_conn, "Atraxa, Praetors' Voice")[0].oracle_id]
+    sol_ring = vocab.index[lookup(rigged_conn, "Sol Ring")[0].oracle_id]
+
+    partial = np.array([sol_ring], dtype=np.int64)
+    added, final = complete_deck(model, vocab, COMMANDER, partial, atraxa)
+
+    # nonland target: 100 - 37 land slots - 1 commander = 62; one already there
+    assert len(added) == 61
+    assert final.size == 62
+    assert not vocab.land[np.array(added)].any()
+    # copy limits respected across the greedy fill
+    idxs, counts = np.unique(final, return_counts=True)
+    over = idxs[(counts > COMMANDER.copy_limit) & ~vocab.any_number[idxs]]
+    assert over.size == 0
+    assert atraxa not in added
+
+
+def test_complete_deck_stops_when_pool_exhausts(rigged_conn):
+    vocab = build_vocab(rigged_conn, COMMANDER)
+    model = tiny_model(vocab)
+    juzam = vocab.index[lookup(rigged_conn, "Juzám Djinn")[0].oracle_id]
+    # mono-black commander shrinks the fixture pool to a couple of cards; the
+    # any-number Relentless Rats keeps the fill going to the nonland target
+    partial = np.empty(0, dtype=np.int64)
+    added, final = complete_deck(model, vocab, COMMANDER, partial, juzam)
+    assert len(added) == 62  # 100 - 37 land slots - 1 commander
+    assert set(np.unique(np.array(added))) <= set(np.flatnonzero(~vocab.land))
 
 
 def test_checkpoint_round_trip_and_vocab_guard(rigged_conn, tmp_path):

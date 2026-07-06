@@ -149,16 +149,27 @@ points recovery@50 (or matches it with better structural stats).
 ### Recommendations
 
 ```bash
-doubletap recommend --deck mydeck.json -k 20 [--model path.pt]
+doubletap recommend --deck mydeck.json -k 20 [--model path.pt] [--personalize 0.3]
+doubletap complete --deck mydeck.json -o full.json
 ```
 
-Defaults to `cql_<format>.pt`, falling back to `bc_<format>.pt`. Suggestions
+Defaults to `bc_<format>.pt` (CQL missed the keep-bar on the full corpus),
+falling back to `cql_<format>.pt`. Suggestions
 are always legal: nonland, within copy limits, inside the commander's color
 identity. Each line shows the Q-score and the top PPMI contributors already in
 your deck ("with Heroic Intervention (11.1), ..."). Lands are deliberately
 excluded from suggestions — random-order training data carries no mana-base
 signal — so the output ends with a structural gap report (card count and land
 count vs. the format target) instead.
+
+`--personalize` (default 0.3, 0 disables) blends the model score with card
+frequencies among the corpus decks most similar to yours (Jaccard nearest
+neighbors, near-duplicates excluded). This counters the global popularity
+skew: cards common in decks *like yours* rank higher even when globally niche.
+
+`complete` greedily fills the deck's nonland slots (deck size minus the land
+target) with the model's top pick, re-scoring after each add, and tells you
+how many lands remain to add.
 
 ## Development
 
