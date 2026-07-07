@@ -9,11 +9,16 @@ of real decks built by other players, not a game simulator.
 - Suggests cards that work well with what you already have
 - Checks your deck against the official rules for your format
 - Shows your deck's power level using the Commander Brackets system
-- Analyzes whether your deck can actually win (ramp, draw, removal, win conditions)
+- Analyzes whether your deck can actually function and win (mana curve, color
+  balance, ramp, draw, removal speed, win conditions)
 - Shows what your deck costs in real money, and can keep suggestions under a budget
 - Automatically fills out a partial deck to completion
 
 **What it does not do:** simulate games or manage your collection.
+
+This README is a guided introduction. For the complete reference — every
+command and option, maintenance procedures, and failure recovery — see the
+[operating manual](docs/operating-manual.md).
 
 **Supported formats:** Commander (exactly 100 cards, one of each, including
 partner-commander and companion decks) and Modern (60-card minimum, up to 4
@@ -225,10 +230,26 @@ DoubleTap can check your deck against these targets:
 doubletap deck analyze ~/.doubletap/decks/my-deck.json
 ```
 
-It reads each card's rules text, counts how many fill each role, flags a deck
-with no detectable way to win, and shows the total market price. The detection
-is heuristic — a card with unusual wording may be missed — so treat it as a
-gap-spotter, not a grade.
+It reads each card's rules text and reports:
+
+- **Role counts vs the targets above**, plus tutors (cards that search your
+  library for what you need — key to consistency in a 100-card deck).
+- **Interaction speed** — how much of your removal works at instant speed.
+  Instant-speed answers can be held up during opponents' turns; sorceries
+  can't respond to anything.
+- **Mana curve** — your nonland cards grouped by cost, average cost, and how
+  many you can cast in the first two turns. A deck that does nothing until
+  turn 5 loses to one acting on turns 1–3, whatever the cards.
+- **Color balance** — the colored mana symbols your spells need vs the colors
+  your lands actually make. It flags a color your lands can't support (e.g.
+  black-heavy costs over a mostly-red mana base means uncastable hands).
+- **Ways to win** — direct "you win" cards, big creatures, creatures with
+  evasion (flying/trample/menace get damage past blockers), poison, and mill.
+- **Total market price.**
+
+The detection is heuristic — a card with unusual wording may be missed — so
+treat it as a gap-spotter, not a grade. The full gameplay-knowledge audit
+behind these checks lives in `docs/gameplay-blindspots.md`.
 
 ### What your deck costs — and building on a budget
 
@@ -426,9 +447,13 @@ src/doubletap/
 ├── decks.py        # deck import, parsing, merging
 ├── ocr.py          # photo text recognition (Apple Vision)
 ├── formats.py      # format rules, validation, Commander Brackets
-├── analysis.py     # card roles (ramp/draw/removal/wincons) and market prices
+├── analysis.py     # card roles, mana curve, color balance, market prices
 ├── archidekt.py    # public decklist crawler
 └── ml/             # suggestion engine (training and inference)
+
+docs/
+├── operating-manual.md     # complete command/maintenance/recovery reference
+└── gameplay-blindspots.md  # gameplay-knowledge audit behind deck analyze
 ```
 
 ## Known limitations

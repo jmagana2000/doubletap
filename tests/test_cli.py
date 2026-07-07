@@ -191,8 +191,19 @@ def test_deck_analyze(loaded_conn, tmp_path):
     result = runner.invoke(app, ["deck", "analyze", str(out)])
     assert result.exit_code == 0
     assert "Functional roles" in result.output
+    assert "Mana curve" in result.output
+    assert "Color balance" in result.output
     assert "Ways to win" in result.output
     assert "Market price" in result.output
+
+
+def test_deck_analyze_flags_missing_color(loaded_conn, tmp_path):
+    # Bolt needs R but the only lands are Swamps (B sources)
+    out = import_deck(tmp_path, body="4 Lightning Bolt\n20 Swamp\n")
+    result = runner.invoke(app, ["deck", "analyze", str(out)])
+    assert result.exit_code == 0
+    assert "not enough lands make this color" in result.output
+    assert "Interaction speed: 4 of 4 removal spells" in result.output
 
 
 def test_deck_price(loaded_conn, tmp_path):

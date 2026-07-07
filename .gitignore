@@ -6,3 +6,4 @@ __pycache__/
 .memsearch/
 .idea/
 dist/
+docs/*.pdf

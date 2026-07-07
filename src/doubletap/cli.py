@@ -749,11 +749,12 @@ def _all_entries(deck):
 
 @deck_app.command("analyze")
 def deck_analyze(path: Path = typer.Argument(..., exists=True, readable=True)):
-    """How does this deck function and win? Role breakdown (ramp, draw,
-    removal, wipes, win conditions) vs. Commander targets, plus market price."""
+    """How does this deck function and win? Roles vs Commander targets, mana
+    curve, color balance, interaction speed, win conditions, market price."""
     conn = db.connect()
     deck = decks.Deck.load(path)
-    by_role, total, unpriced = analysis.analyze_deck(conn, _all_entries(deck))
+    report = analysis.deck_report(conn, _all_entries(deck))
+    by_role = report.by_role
 
     def count(role):
         return sum(qty for _, qty in by_role.get(role, []))
@@ -766,20 +767,58 @@ def deck_analyze(path: Path = typer.Argument(..., exists=True, readable=True)):
         ("draw", "Card draw", "draw"),
         ("removal", "Removal/interaction", "removal"),
         ("board_wipe", "Board wipes", "board_wipe"),
+        ("tutor", "Tutors (search)", None),
     ]
     for role, label, target_key in labels:
         n = count(role)
         target = (
             analysis.COMMANDER_TARGETS.get(target_key)
-            if deck.format == "commander"
+            if target_key and deck.format == "commander"
             else None
         )
         target_str = f"   (target ~{target})" if target else ""
         typer.echo(f"  {label:<20} {n:>3}{target_str}")
 
+    n_removal, n_instant = count("removal"), count("removal_instant")
+    if n_removal:
+        typer.echo(
+            f"\nInteraction speed: {n_instant} of {n_removal} removal spells"
+            " work at instant speed (castable on opponents' turns)."
+        )
+
+    if report.curve:
+        typer.echo("\nMana curve (nonland cards by mana value):")
+        buckets = "  ".join(
+            f"{mv if mv < analysis.CURVE_TOP_BUCKET else '7+'}:{report.curve.get(mv, 0)}"
+            for mv in range(analysis.CURVE_TOP_BUCKET + 1)
+        )
+        typer.echo(f"  {buckets}")
+        typer.echo(
+            f"  average {report.avg_mv:.1f}; cards costing 2 or less"
+            f" (your turn-1/2 plays): {report.early_plays}"
+        )
+
+    if report.pips and report.sources:
+        typer.echo("\nColor balance (mana symbols in costs vs lands producing it):")
+        pip_total = sum(report.pips.values())
+        source_total = sum(report.sources.values())
+        short = set(analysis.short_colors(report))
+        for color in "WUBRG":
+            if not report.pips.get(color) and not report.sources.get(color):
+                continue
+            need = report.pips.get(color, 0) / pip_total
+            have = report.sources.get(color, 0) / source_total
+            flag = "  ← not enough lands make this color" if color in short else ""
+            typer.echo(
+                f"  {color}: {need:4.0%} of symbols, {have:4.0%} of sources{flag}"
+            )
+
     typer.echo("\nWays to win:")
     wincons = by_role.get("wincon", [])
     threats = by_role.get("threat", [])
+    n_evasive = count("evasive")
+    n_poison = count("poison")
+    n_mill = count("mill")
     for name, _ in wincons:
         typer.echo(f'  "{name}" wins the game directly')
     if threats:
@@ -787,15 +826,26 @@ def deck_analyze(path: Path = typer.Argument(..., exists=True, readable=True)):
             f"  {sum(q for _, q in threats)} big creatures (power "
             f"{analysis.BIG_THREAT_POWER}+) that can win through combat"
         )
-    if not wincons and not threats:
+    if n_evasive:
         typer.echo(
-            "  none detected — every deck needs a plan to reduce opponents'"
-            " life to 0 (big creatures, damage spells, or a card that says"
-            ' "you win the game")'
+            f"  {n_evasive} creatures with evasion (flying, trample, ...) that"
+            " can get damage through blockers"
+        )
+    if n_poison:
+        typer.echo(
+            f"  {n_poison} cards give poison counters (10 poison = a player loses)"
+        )
+    if n_mill:
+        typer.echo(f"  {n_mill} cards mill libraries (a player who can't draw loses)")
+    if not any((wincons, threats, n_evasive, n_poison, n_mill)):
+        typer.echo(
+            "  none detected — every deck needs a plan: reduce opponents' life"
+            " to 0 (creatures, damage), poison, mill, or a card that says"
+            ' "you win the game"'
         )
 
-    price_note = f" ({unpriced} cards unpriced)" if unpriced else ""
-    typer.echo(f"\nMarket price: ${total:,.2f}{price_note}")
+    price_note = f" ({report.unpriced} cards unpriced)" if report.unpriced else ""
+    typer.echo(f"\nMarket price: ${report.total_price:,.2f}{price_note}")
 
 
 @deck_app.command("price")
