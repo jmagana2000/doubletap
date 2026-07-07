@@ -121,6 +121,17 @@ match and ask you to confirm before saving.
 
 ### Viewing and combining your decks
 
+**Add or remove a card:**
+```bash
+doubletap deck add    ~/.doubletap/decks/my-deck.json "Sol Ring"
+doubletap deck remove ~/.doubletap/decks/my-deck.json "Sol Ring"
+```
+Use `-n 4` to add or remove several copies at once. Card names must match
+exactly — a typo gets suggestions instead of a wrong card. Adding warns
+immediately if the card breaks a rule (a duplicate in Commander, outside your
+commander's colors) but still saves, so you can fix things in any order.
+Removing the commander, partner, or companion by name clears that slot.
+
 **Set or change a deck's commander:**
 ```bash
 doubletap deck commander ~/.doubletap/decks/my-deck.json "Atraxa, Praetors' Voice"

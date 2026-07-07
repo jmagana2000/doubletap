@@ -167,6 +167,56 @@ def test_deck_commander_set_and_swap(loaded_conn, tmp_path):
     assert Deck.load(out).size() == 4  # unchanged
 
 
+def test_deck_add_and_remove(loaded_conn, tmp_path):
+    from doubletap.decks import Deck
+
+    out = import_deck(tmp_path, body="1 Sol Ring\n")
+
+    result = runner.invoke(app, ["deck", "add", str(out), "Lightning Bolt", "-n", "4"])
+    assert result.exit_code == 0, result.output
+    assert Deck.load(out).entries[oid(loaded_conn, "Lightning Bolt")] == 4
+
+    result = runner.invoke(
+        app, ["deck", "remove", str(out), "Lightning Bolt", "-n", "3"]
+    )
+    assert result.exit_code == 0, result.output
+    deck = Deck.load(out)
+    assert deck.entries[oid(loaded_conn, "Lightning Bolt")] == 1
+
+    # removing the last copy deletes the entry entirely
+    result = runner.invoke(app, ["deck", "remove", str(out), "Lightning Bolt"])
+    assert result.exit_code == 0
+    assert oid(loaded_conn, "Lightning Bolt") not in Deck.load(out).entries
+
+    # removing a card that isn't there fails cleanly
+    result = runner.invoke(app, ["deck", "remove", str(out), "Lightning Bolt"])
+    assert result.exit_code == 1
+
+    # fuzzy/unknown names are rejected with suggestions, nothing changes
+    result = runner.invoke(app, ["deck", "add", str(out), "Lightning Blot"])
+    assert result.exit_code == 1
+    assert Deck.load(out).size() == 1  # just Sol Ring
+
+
+def test_deck_add_warns_on_violation(loaded_conn, tmp_path):
+    # Juzám Djinn is black; Atraxa deck is WUBG, so no warning there —
+    # use a commander deck and add a second copy to trip the copy limit
+    out = import_deck(tmp_path)
+    result = runner.invoke(app, ["deck", "add", str(out), "Sol Ring"])
+    assert result.exit_code == 0
+    assert "exceeds the 1-copy limit" in result.output
+
+
+def test_deck_remove_clears_commander_slot(loaded_conn, tmp_path):
+    from doubletap.decks import Deck
+
+    out = import_deck(tmp_path)  # commander: Atraxa
+    result = runner.invoke(app, ["deck", "remove", str(out), "Atraxa, Praetors' Voice"])
+    assert result.exit_code == 0
+    assert "Removed commander" in result.output
+    assert Deck.load(out).commander is None
+
+
 def test_deck_show_lists_cards(loaded_conn, tmp_path):
     out = import_deck(tmp_path)
     result = runner.invoke(app, ["deck", "show", str(out)])

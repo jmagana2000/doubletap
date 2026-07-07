@@ -265,6 +265,60 @@ def deck_commander(
             typer.echo(f"note: {v.message}")
 
 
+@deck_app.command("add")
+def deck_add(
+    path: Path = typer.Argument(..., exists=True, readable=True),
+    name: str = typer.Argument(..., help="Card to add"),
+    qty: int = typer.Option(1, "--qty", "-n", help="How many copies"),
+):
+    """Add a card to a saved deck. Warns if it breaks format rules
+    (copy limit, color identity) but saves anyway — fix at your leisure."""
+    conn = db.connect()
+    deck = decks.Deck.load(path)
+    oid, resolved = _resolve_one(conn, name)
+    deck.entries[oid] += qty
+    deck.save(conn, path)
+    typer.echo(f"+{qty} {resolved} ({deck.size()} cards) → {path}")
+    for v in formats.validate(conn, deck):
+        if v.code != "wrong_size" and v.oracle_id == oid:
+            typer.echo(f"note: {v.message}")
+
+
+@deck_app.command("remove")
+def deck_remove(
+    path: Path = typer.Argument(..., exists=True, readable=True),
+    name: str = typer.Argument(..., help="Card to remove"),
+    qty: int = typer.Option(1, "--qty", "-n", help="How many copies"),
+):
+    """Remove a card from a saved deck. Removing the commander, partner,
+    or companion clears that slot."""
+    conn = db.connect()
+    deck = decks.Deck.load(path)
+    oid, resolved = _resolve_one(conn, name)
+
+    if oid == deck.commander:
+        deck.commander, deck.partner = deck.partner, None
+        typer.echo(f"Removed commander {resolved}")
+    elif oid == deck.partner:
+        deck.partner = None
+        typer.echo(f"Removed partner {resolved}")
+    elif oid == deck.companion:
+        deck.companion = None
+        typer.echo(f"Removed companion {resolved}")
+    elif deck.entries.get(oid):
+        removed = min(qty, deck.entries[oid])
+        deck.entries[oid] -= removed
+        if not deck.entries[oid]:
+            del deck.entries[oid]
+        typer.echo(f"-{removed} {resolved}")
+    else:
+        typer.echo(f"{resolved} is not in this deck.", err=True)
+        raise typer.Exit(code=1)
+
+    deck.save(conn, path)
+    typer.echo(f"{deck.size()} cards → {path}")
+
+
 @deck_app.command("show")
 def deck_show(path: Path = typer.Argument(..., exists=True, readable=True)):
     """List every card in a deck, grouped by slot (commander, companion, deck)."""

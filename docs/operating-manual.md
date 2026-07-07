@@ -110,6 +110,8 @@ Imports never guess silently: ambiguous/unmatched lines abort the import
 |---|---|
 | `deck list` | Table of every deck in `~/.doubletap/decks/`: file, format, card count, commander (or contents for small commander-less files) |
 | `deck show PATH` | Every card in one deck: commander/partner/companion slots, then quantities, alphabetical |
+| `deck add PATH NAME` | Add a card (`-n`/`--qty` copies, default 1). Exact name required. Warns on rule violations the add causes (copy limit, color identity) but saves anyway. Exit 1 on unresolved names, nothing written |
+| `deck remove PATH NAME` | Remove `-n` copies (default 1; capped at what's there). Removing the commander/partner/companion by name clears that slot. Exit 1 if the card isn't in the deck |
 | `deck commander PATH [NAME]` | Without NAME: show current commander and its color identity. With NAME: set/change the commander (`--partner "Name"` for partners). The old commander returns to the main deck; a promoted card leaves it — count is preserved. Requires an exact name; typos get suggestions, not guesses |
 | `deck merge PATH PATH...` | Combine ≥2 deck files. `-o` output (default `decks/merged.json`); `--format` overrides (required when inputs disagree). First commander/companion wins; others are noted |
 | `deck validate PATH` | Format legality: banned/not-legal cards, size, copy limits (basic-land and "any number" exemptions), commander eligibility, color identity, partner legality, all ten companion restrictions. Exit 0 clean / 1 with violations |
