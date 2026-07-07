@@ -13,8 +13,11 @@ def score_state(
     partial_idxs: np.ndarray,
     commander_idx: int | None,
     partner_idx: int | None = None,
+    extra_mask: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Scores over the full vocab for one state; illegal actions are -inf."""
+    """Scores over the full vocab for one state; illegal actions are -inf.
+    `extra_mask` (bool, vocab-length) further restricts the pool — used for
+    budget caps."""
     with torch.no_grad():
         bag = torch.from_numpy(partial_idxs)
         offsets = torch.zeros(1, dtype=torch.int64)
@@ -24,6 +27,8 @@ def score_state(
         ).unsqueeze(0)
         state = model.state_repr(bag, offsets, commander, feats)[0]
         mask = action_mask(vocab, fmt, partial_idxs, commander_idx, partner_idx)
+        if extra_mask is not None:
+            mask = mask & extra_mask
         pool = np.flatnonzero(mask)
         scores = np.full(len(vocab), -np.inf, dtype=np.float32)
         scores[pool] = model.score_pool(state, torch.from_numpy(pool)).numpy()
@@ -37,6 +42,7 @@ def complete_deck(
     partial_idxs: np.ndarray,
     commander_idx: int | None,
     partner_idx: int | None = None,
+    extra_mask: np.ndarray | None = None,
 ) -> tuple[list[int], np.ndarray]:
     """Greedily fill the deck's nonland slots (deck size minus the land-target
     slots), re-scoring after each add. Lands stay the user's job. Returns
@@ -55,7 +61,9 @@ def complete_deck(
         int((~vocab.land[partial]).sum()) < target_nonland
         and partial.size + committed < fmt.deck_size
     ):
-        scores = score_state(model, vocab, fmt, partial, commander_idx, partner_idx)
+        scores = score_state(
+            model, vocab, fmt, partial, commander_idx, partner_idx, extra_mask
+        )
         best = int(np.argmax(scores))
         if not np.isfinite(scores[best]):
             break

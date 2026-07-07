@@ -117,6 +117,19 @@ def test_parse_accepts_partner_commanders(loaded_conn):
     assert deck.size() == 100  # 2 commanders + 1 Sol Ring + 1 Djinn + 96 Swamps
 
 
+def test_parse_drops_companion_category(loaded_conn):
+    """The companion sits outside the 100; counting it would reject the deck
+    for wrong size."""
+    raw = commander_api_deck(loaded_conn)
+    raw["cards"].append(
+        api_card(loaded_conn, "Lurrus of the Dream-Den", 1, ["Companion"])
+    )
+    deck, reason = parse_trimmed(loaded_conn, _trim(loaded_conn, raw, "commander"))
+    assert reason == "ok"
+    assert deck.size() == 100
+    assert oid(loaded_conn, "Lurrus of the Dream-Den") not in deck.entries
+
+
 def test_parse_rejects_unresolvable_cards(loaded_conn):
     raw = modern_api_deck(loaded_conn)
     raw["cards"].append(

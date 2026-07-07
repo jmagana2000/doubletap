@@ -1,231 +1,439 @@
 # DoubleTap
 
-MTG deck-building assistant with offline-RL card recommendations. Give it a
-partial (or complete) deck and it suggests the top-k additions, learned from
-thousands of human-built decklists — no game simulator, no self-play.
+A command-line tool that helps you build Magic: The Gathering decks. Tell it
+what cards you have, and it suggests what to add next — learned from thousands
+of real decks built by other players, not a game simulator.
 
-- **Format-parameterized**: card legality comes from Scryfall's per-card
-  legalities; construction rules (deck size, copy limits, singleton, commander
-  color identity) come from per-format config. Ships with **Commander** and
-  **Modern**.
-- **Two models, honestly compared**: a behavior-cloning baseline (BC) and
-  Conservative Q-Learning (CQL) trained on PPMI-synergy + structural rewards,
-  A/B'd on the same held-out recovery@k harness.
-- **Deck import three ways**: CSV (Moxfield/Archidekt exports), plain-text
-  decklists, or a photo/screenshot of a decklist (Apple Vision OCR + fuzzy
-  matching — no image classification).
-- **Non-goals**: gameplay simulation, pricing, collection management.
+**What it does:**
+- Imports your cards from a photo, a text file, or a spreadsheet export
+- Suggests cards that work well with what you already have
+- Checks your deck against the official rules for your format
+- Shows your deck's power level using the Commander Brackets system
+- Analyzes whether your deck can actually win (ramp, draw, removal, win conditions)
+- Shows what your deck costs in real money, and can keep suggestions under a budget
+- Automatically fills out a partial deck to completion
 
-## Installation
+**What it does not do:** simulate games or manage your collection.
 
-Requires Python ≥ 3.11. macOS is needed for photo import (Apple Vision) —
-everything else is cross-platform.
+**Supported formats:** Commander (exactly 100 cards, one of each, including
+partner-commander and companion decks) and Modern (60-card minimum, up to 4
+copies of a card, companions supported). Other formats aren't supported yet;
+any deck you import is treated as one of these two.
+
+---
+
+## Getting started
+
+### 1. Install
+
+You need Python 3.11 or newer. Run these commands once in the project folder:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -e ".[dev,ocr]"       # core + tests + photo import
-.venv/bin/pip install -e ".[ml]"            # torch, for training/recommending
+.venv/bin/pip install -e ".[dev,ocr]"
+.venv/bin/pip install -e ".[ml]"
 ```
 
-> **Intel Macs**: the last torch wheel for x86_64 macOS is 2.2.2 (Python 3.11
-> only) and it predates the numpy 2 ABI. Create the venv with `python3.11` and
-> install `pip install "torch==2.2.2" "numpy<2"` instead of the `ml` extra.
-
-All data lives in `~/.doubletap/` (override with `DOUBLETAP_HOME`): the SQLite
-card/corpus database, the cached Scryfall bulk file, raw crawl shards, and
-trained model checkpoints. Nothing is written inside the repo.
-
-## Quick start
+Then activate the environment so you can type `doubletap` directly:
 
 ```bash
-# 1. Build the local card cache (~180 MB download from Scryfall, refreshed
-#    only when their bulk data changes)
+source .venv/bin/activate
+```
+
+> **Intel Mac note:** Use `python3.11` when creating the venv and replace the
+> last line above with `pip install "torch==2.2.2" "numpy<2"`.
+
+### 2. Download the card database
+
+DoubleTap needs a local copy of every Magic card to look up names and rules.
+This downloads about 180 MB from Scryfall (the free Magic card database) and
+only re-downloads when new cards are released:
+
+```bash
 doubletap cards sync
-
-# 2. Import your deck — CSV, text list, or a photo of a decklist
-doubletap deck import mydeck.csv --format commander -o mydeck.json
-doubletap deck import decklist.png --format commander -o mydeck.json
-
-# 3. Check it against format rules
-doubletap deck validate mydeck.json
-
-# 4. Get suggestions (needs a trained model — see below)
-doubletap recommend --deck mydeck.json -k 20
 ```
 
-## Command reference
+You're ready to use all commands after this step.
 
-### Card cache
+---
+
+## Everyday use
+
+### Importing cards
+
+You can add cards from a photo of a physical card, a screenshot of a decklist,
+a plain-text list, or a CSV export from Moxfield or Archidekt.
+
+**From a photo of a physical card (iPhone/camera):**
+```bash
+doubletap deck import /path/to/photo.HEIC
+```
+DoubleTap reads the card name from the photo using Apple's built-in text
+recognition. Works with `.HEIC`, `.jpg`, `.png`, and other common image
+formats. The saved file is named after the card, not the photo — a photo of
+Sol Ring becomes `sol-ring.json` (a second photo of the same card becomes
+`sol-ring-2.json`, so nothing is overwritten).
+
+**From a plain-text list:**
+```bash
+doubletap deck import decklist.txt --format commander
+```
+`--format` (or `-f`) accepts `commander` or `modern` and defaults to
+`commander` if omitted. Each line should be a card name with an optional
+quantity, like:
+```
+1 Sol Ring
+1 Atraxa, Praetors' Voice *CMDR*
+4 Lightning Bolt
+Swamp
+```
+Lines starting with a quantity are treated as that many copies. A line marked
+`*CMDR*` or under a `Commander:` section header is set as your commander.
+
+Decks with two commanders are supported: if both cards have the "Partner"
+ability, mark both lines `*CMDR*` (or list both under `Commander:`). Cards in
+the deck may use the colors of either commander.
+
+Companions are supported too: list the card under a `Companion:` section
+header (or pass `--companion "Card Name"`). The companion sits outside the
+deck — it doesn't count toward the 60 or 100 cards — and `deck validate`
+checks that your deck actually meets its deckbuilding restriction (for
+example, Lurrus requires every permanent to cost 2 or less).
+
+**From a Moxfield or Archidekt CSV export:**
+```bash
+doubletap deck import export.csv --format modern
+```
+
+Every import is saved automatically to `~/.doubletap/decks/`. Use `-o` to save
+somewhere else:
+```bash
+doubletap deck import photo.HEIC -o ~/my-decks/atraxa.json
+```
+
+If a card name is unclear (blurry photo, typo), DoubleTap will show the closest
+match and ask you to confirm before saving.
+
+### Viewing and combining your decks
+
+**Set or change a deck's commander:**
+```bash
+doubletap deck commander ~/.doubletap/decks/my-deck.json "Atraxa, Praetors' Voice"
+```
+Works on any saved deck. If the card is already in the main deck it's moved
+to the commander slot; a previous commander moves back into the main deck, so
+the card count doesn't change. For partner commanders add
+`--partner "Second Commander"`. It warns right away about any cards outside
+the new commander's colors. Omit the card name to just see the current
+commander:
+```bash
+doubletap deck commander ~/.doubletap/decks/my-deck.json
+```
+
+**See every card in a deck:**
+```bash
+doubletap deck show ~/.doubletap/decks/my-deck.json
+```
+Prints the commander, partner, and companion (when set), then each card with
+its quantity, alphabetically.
+
+**List all saved decks:**
+```bash
+doubletap deck list
+```
+Shows each deck's file name, format, card count, and commander. For small
+commander-less files (like single-card photo imports) it shows the card
+names instead, so you can tell what's inside at a glance.
+
+**Combine individual card imports into one deck:**
+
+When you photograph cards one at a time, each import creates a separate file.
+Merge them into one deck like this:
+```bash
+doubletap deck merge ~/.doubletap/decks/sol-ring.json \
+                     ~/.doubletap/decks/negate.json \
+                     ~/.doubletap/decks/adeline-resplendent-cathar.json \
+                  -o ~/.doubletap/decks/my-commander-deck.json
+```
+
+Use `--format` if you want to assign a different format than the one used
+during import:
+```bash
+doubletap deck merge ~/.doubletap/decks/*.json --format modern -o modern.json
+```
+
+### Checking your deck's power level (Commander Brackets)
+
+Commander Brackets is an official system from Wizards of the Coast that helps
+players find games at a matching power level. There are five brackets:
+
+| Bracket | Name | What it means |
+|---|---|---|
+| 1 | Exhibition | Ultra-casual, theme decks, unusual builds |
+| 2 | Core | Average preconstructed deck power |
+| 3 | Upgraded | Stronger than precon, not tournament-ready |
+| 4 | Optimized | High-powered, combos allowed |
+| 5 | cEDH | Competitive tournament play |
+
+To see which bracket your deck falls into:
+```bash
+doubletap deck bracket ~/.doubletap/decks/my-deck.json
+```
+
+The bracket is determined by how many "Game Changers" are in your deck — a list
+of about 40 cards (powerful tutors, fast mana, win-condition engines) that
+WotC identified as having an outsized effect on games. Zero Game Changers puts
+you at Bracket 1 or 2; 1–3 puts you at Bracket 3; 4 or more puts you at
+Bracket 4.
+
+The tool lists exactly which Game Changers are in your deck so you can decide
+whether to swap them out for a lower-bracket game.
+
+### How you win a game — and what that means for your deck
+
+If you're new to Magic, here is the short version of how games end. You win by
+doing any one of these:
+
+- **Reduce every opponent's life to 0.** They start at 40 in Commander, 20 in
+  Modern. This is how most games end — usually by attacking with creatures.
+- **Commander damage (Commander only):** if any single commander deals 21 or
+  more combat damage to a player over the course of the game, that player loses.
+- **Poison:** a player with 10 or more poison counters loses. Cards with
+  "infect" or "toxic" give these.
+- **Decking:** a player who must draw a card from an empty library loses. Decks
+  built around this are called "mill" decks.
+- **"You win the game" cards:** a small number of cards simply end the game
+  when their condition is met (for example, Thassa's Oracle).
+
+A deck that can win needs more than just a win condition, though. If you spend
+all your mana on threats, you'll be behind on resources; if you only draw and
+ramp, you'll never close a game. Experienced Commander players aim for a rough
+balance in a 100-card deck:
+
+| Role | What it is | Rough target |
+|---|---|---|
+| Lands | Your mana every turn | ~36 |
+| Ramp | Cards that give extra mana (Sol Ring, Cultivate) | ~10 |
+| Card draw | Cards that refill your hand | ~10 |
+| Removal | Answers to opposing threats (Swords to Plowshares, Negate) | ~10 |
+| Board wipes | Reset buttons when you're behind (Wrath of God) | ~3 |
+| Win conditions | Big creatures, combos, or "you win" cards | a clear plan |
+
+DoubleTap can check your deck against these targets:
 
 ```bash
-doubletap cards sync [--force]        # download/refresh Scryfall oracle cards
-doubletap cards lookup "lightning blot"   # exact + fuzzy name resolution
+doubletap deck analyze ~/.doubletap/decks/my-deck.json
 ```
 
-Lookup is diacritics-insensitive and face-aware: `malakir rebirth` finds the
-MDFC "Malakir Rebirth // Malakir Mire", and face-name collisions (a card face
-named "Lightning Bolt") never shadow the real card.
+It reads each card's rules text, counts how many fill each role, flags a deck
+with no detectable way to win, and shows the total market price. The detection
+is heuristic — a card with unusual wording may be missed — so treat it as a
+gap-spotter, not a grade.
 
-The `score` field in lookup output is fuzzy string-match confidence (0–100).
-A score of 100 means the normalized query matched the card name exactly; lower
-scores are rapidfuzz `WRatio` similarity — higher = closer string. It has no
-relation to card power or synergy. Candidates below 60 are dropped.
+### What your deck costs — and building on a budget
 
-### Deck import
+Card prices come from Scryfall's market data and are already in your local
+card database after `doubletap cards sync` (refresh with `--force` for current
+prices).
 
+**See what a deck costs:**
 ```bash
-doubletap deck import <file> --format <commander|modern> [-o deck.json]
-                      [--commander "Card Name"] [--threshold 90]
-                      [--no-interactive]
+doubletap deck price ~/.doubletap/decks/my-deck.json
 ```
+Shows the total in USD and the most expensive cards — useful for spotting
+where the money is if you want a cheaper version.
 
-Input is routed by extension: `.csv` (Moxfield `Count`/Archidekt `Quantity`
-headers), images (`.png .jpg .heic ...` → Vision OCR), anything else as a
-plain-text list (`4 Lightning Bolt`, `4x ...`, section headers, `*CMDR*`
-markers; sideboards are dropped).
-
-Name resolution never guesses silently: exact matches resolve; fuzzy matches
-≥ threshold with a clear gap are accepted but printed as `assumed`; everything
-else is reported `ambiguous`/`unmatched` and the import exits non-zero without
-writing (in a terminal you'll be prompted to settle ambiguous lines
-interactively).
-
-### Deck validation
-
+**Keep suggestions within a budget:** add `--max-card-price` to `recommend` or
+`complete` and DoubleTap will only suggest cards at or under that price:
 ```bash
-doubletap deck validate deck.json
+doubletap recommend --deck my-deck.json -k 20 --max-card-price 1.00
+doubletap complete --deck my-deck.json --max-card-price 5.00 -o budget.json
 ```
+This is per card, not per deck — a $1 cap builds a deck where every suggested
+card costs $1 or less.
 
-Checks Scryfall legality (banned/not-legal), deck size (exact 100 for
-Commander, min 60 for Modern), copy limits (with basic-land and "a deck can
-have any number..." exemptions), commander eligibility, and color identity.
-Exit 0 when clean, 1 with a violation list otherwise.
+### Checking if a deck is legal
 
-### Training corpus
-
+This checks your deck against the official format rules:
 ```bash
-doubletap corpus crawl --format commander --max 20000 [--order-by -viewCount]
-doubletap corpus stats
-doubletap corpus pmi --format commander [--min-count 20] [--top 20]
+doubletap deck validate ~/.doubletap/decks/my-deck.json
 ```
 
-The crawler pulls public Archidekt decks (politely: 1 req/s + jitter,
-identified User-Agent, exponential backoff, hard stop on repeated 429s). It is
-fully resumable — deck ids are queued in SQLite, fetched decks are never
-re-requested, and trimmed raw responses are kept in
-`~/.doubletap/corpus/raw/*.jsonl.gz` so tables can be rebuilt without
-re-crawling. Only decks that pass full format validation enter the corpus
-(partner commanders and >2%-unresolvable decks are rejected).
+It will tell you about:
+- Banned cards
+- Wrong number of cards (Commander needs exactly 100; Modern needs at least 60)
+- Too many copies of a card (Commander allows only 1 of each; Modern allows 4)
+- Cards outside your commander's color identity (Commander only)
+- A companion whose deckbuilding restriction your deck doesn't meet (all ten
+  companions' rules are checked)
 
-`corpus stats` shows a per-format breakdown with three status values:
+### Looking up a card by name
 
-| Status | Meaning |
-|---|---|
-| `parsed` | Passed all filters — in the training corpus |
-| `rejected` | Fetched but failed a parse-time filter |
-| `gone` | Server returned 4xx (deleted/private deck) — skipped permanently |
+If you're not sure how a card name is spelled, DoubleTap will find it:
+```bash
+doubletap cards lookup "lightning blot"
+```
 
-Common rejection reasons: >2% unresolvable card names (proxies/custom cards),
-partner commanders (v1 out-of-scope), wrong deck size, banned cards, or
-color-identity violations. Commander typically rejects ~50% of fetched decks
-because of how strictly the 100-card singleton + color-identity rules are
-enforced.
+It handles typos, accented characters, and split card names. The score shown
+(0–100) is how closely your search matched — 100 is an exact match. It has
+nothing to do with how powerful the card is.
 
-For a large crawl, keep the machine awake:
+Each match also shows the card's color identity in brackets, like
+`[WUBG (white, blue, black, green)]` — useful for checking whether a card
+fits your commander's colors before adding it. `doubletap deck commander
+<deck.json>` (with no card name) shows your commander's identity the same way.
+
+---
+
+## Getting card suggestions (requires a trained model)
+
+This is the main feature: given your partial deck, DoubleTap suggests the
+cards most likely to fit based on patterns from thousands of real decks.
+
+**Before you can get suggestions, you need a trained model.** This is a
+one-time setup that requires downloading public decklists and running a
+training process. See [Training a model](#training-a-model-advanced) below.
+
+Once you have a model:
+
+**Get the top 20 suggestions for your deck:**
+```bash
+doubletap recommend --deck ~/.doubletap/decks/my-deck.json -k 20
+```
+
+Each suggestion shows a score and the cards already in your deck that pair
+well with it. For example:
+```
+  1. Heroic Intervention                     2.341  with Atraxa (8.2), Sol Ring (4.1)
+  2. Cyclonic Rift                            2.187  with Atraxa (7.9)
+```
+
+Lands are not suggested — the tool focuses on nonland cards, and a structural
+note at the end tells you how many lands you still need to add.
+
+**Auto-complete a partial deck:**
+```bash
+doubletap complete --deck ~/.doubletap/decks/my-deck.json -o finished.json
+```
+
+This fills all remaining nonland slots with the model's top picks, re-scoring
+after each addition. When it's done it tells you how many lands to add to
+finish the deck.
+
+**Adjust suggestions to your specific deck style** with `--personalize`
+(default is 0.3, range 0–1). Higher values weight cards that appear in decks
+most similar to yours; lower values rely more on the model's general knowledge:
+```bash
+doubletap recommend --deck my-deck.json -k 20 --personalize 0.5
+```
+
+---
+
+## Training a model (advanced)
+
+The suggestion engine learns from real public decklists. You only need to do
+this once (or redo it after a big card set release).
+
+### Step 1 — Download public decklists
+
+This crawls Archidekt (a free public deckbuilding site) at a polite rate of
+about one request per second. It will take several hours for a large corpus.
+Keep your Mac awake with `caffeinate`:
 
 ```bash
 caffeinate -is doubletap corpus crawl --format commander --max 20000
 ```
 
-`corpus pmi` builds the smoothed PPMI synergy table (co-occurrence lift over
-popularity, min-count filtered) used for CQL rewards and recommendation
-rationale. Its top-pairs printout is a good corpus sanity check — you should
-see real packages (Blood Artist + Viscera Seer, Thoughtseize + Inquisition of
-Kozilek).
-
-### Training and evaluation
-
+Check progress at any time:
 ```bash
-doubletap train bc  --format commander [--steps 2000]
-doubletap corpus pmi --format commander            # prerequisite for cql
-doubletap train cql --format commander [--steps 1500] [--alpha 1.0]
-doubletap eval --model ~/.doubletap/models/cql_commander.pt
+doubletap corpus stats
 ```
 
-Both algorithms share one architecture: a two-tower Q(state, candidate)
-network (state = sum of card embeddings + curve/land/identity features;
-candidate = card embedding + structured Scryfall features). BC trains with
-sampled-softmax cross-entropy on "what card did the human add next"; CQL adds
-a conservative penalty (sampled logsumexp with `log(N/K)` correction) and TD
-targets on PPMI-synergy + land-fraction rewards, initialized from the BC
-checkpoint.
+The stats show how many decks were downloaded (`parsed`), skipped because they
+had errors or illegal cards (`rejected`), or deleted since they were queued
+(`gone`). Commander typically rejects about half of downloaded decks — most
+public decks have missing cards, the wrong deck size, or rule violations that
+disqualify them from training. Partner-commander decks are accepted.
 
-Evaluation is **held-out deck completion**: hide 10 random nonland cards from
-each holdout deck and measure what fraction appear in the model's top-k
-(recovery@10/50/100). Decision rule: CQL ships only if it beats BC by ≥2
-points recovery@50 (or matches it with better structural stats).
+### Step 2 — Build the synergy table
 
-### Recommendations
-
+This analyzes which cards tend to appear together across all downloaded decks:
 ```bash
-doubletap recommend --deck mydeck.json -k 20 [--model path.pt] [--personalize 0.3]
-doubletap complete --deck mydeck.json -o full.json
+doubletap corpus pmi --format commander
 ```
 
-Defaults to `bc_<format>.pt` (CQL missed the keep-bar on the full corpus),
-falling back to `cql_<format>.pt`. Suggestions
-are always legal: nonland, within copy limits, inside the commander's color
-identity. Each line shows the Q-score and the top PPMI contributors already in
-your deck ("with Heroic Intervention (11.1), ..."). Lands are deliberately
-excluded from suggestions — random-order training data carries no mana-base
-signal — so the output ends with a structural gap report (card count and land
-count vs. the format target) instead.
+### Step 3 — Train
 
-`--personalize` (default 0.3, 0 disables) blends the model score with card
-frequencies among the corpus decks most similar to yours (Jaccard nearest
-neighbors, near-duplicates excluded). This counters the global popularity
-skew: cards common in decks *like yours* rank higher even when globally niche.
+```bash
+doubletap train bc --format commander
+```
 
-`complete` greedily fills the deck's nonland slots (deck size minus the land
-target) with the model's top pick, re-scoring after each add, and tells you
-how many lands remain to add.
+This takes 10–30 minutes depending on corpus size. When it finishes, the model
+is saved to `~/.doubletap/models/` and `recommend` will use it automatically.
+
+### Evaluating model quality
+
+```bash
+doubletap eval --model ~/.doubletap/models/bc_commander.pt
+```
+
+This hides some cards from test decks and measures how often the model ranks
+them highly. Higher numbers mean better suggestions.
+
+---
+
+## Troubleshooting
+
+**`command not found: doubletap`**
+The virtual environment isn't active. Run `source .venv/bin/activate` first,
+or prefix every command with `.venv/bin/doubletap`.
+
+**Photo import reads the wrong text**
+The tool works best on screenshots of printed decklists. For physical card
+photos, point it at the card face straight-on with the name clearly visible.
+
+**Suggestions seem generic or obvious**
+The model learns from popular public decks, so widely-played cards rank
+highly. Use `--personalize 0.5` or higher to shift weight toward cards that
+appear in decks similar to yours.
+
+**A card name isn't found**
+Run `doubletap cards sync` to refresh the card database — it may be a newly
+released card.
+
+**`No module named 'torch'` when running `recommend` or `complete`**
+The `doubletap` launcher is pointing at a Python without torch installed
+(this can happen when the venv holds more than one Python version). Reinstall
+the launcher from the interpreter that has torch:
+`.venv/bin/python -m pip install -e . --no-deps --force-reinstall`
+
+---
 
 ## Development
 
 ```bash
-.venv/bin/pytest                 # full suite; HTTP mocked, no network needed
-.venv/bin/pytest -m macos_ocr    # manual Vision smoke test
-                                 # (set DOUBLETAP_OCR_TEST_IMAGE=/path/to.png)
+.venv/bin/pytest              # run all tests (no network required)
+.venv/bin/pytest -m macos_ocr # photo OCR smoke test (requires a real image)
 ```
 
-Layout:
-
+Source layout:
 ```
 src/doubletap/
-├── cli.py          # typer app: cards / deck / corpus / train / eval / recommend
-├── db.py           # SQLite schema + DOUBLETAP_HOME resolution
-├── scryfall.py     # bulk data sync
-├── names.py        # normalization + fuzzy lookup
-├── decks.py        # Deck model, CSV/text parsing, resolution pipeline
-├── ocr.py          # Apple Vision wrapper (one mockable function)
-├── formats.py      # per-format configs + validator
-├── archidekt.py    # rate-limited resumable crawler
-└── ml/
-    ├── data.py     # vocab, card/state features, action masks, transition sampler
-    ├── reward.py   # smoothed PPMI + structural reward
-    ├── model.py    # two-tower Q network, checkpoints
-    ├── train_bc.py / train_cql.py / eval.py
+├── cli.py          # all commands
+├── db.py           # local database
+├── scryfall.py     # card data download
+├── names.py        # name lookup and fuzzy matching
+├── decks.py        # deck import, parsing, merging
+├── ocr.py          # photo text recognition (Apple Vision)
+├── formats.py      # format rules, validation, Commander Brackets
+├── analysis.py     # card roles (ramp/draw/removal/wincons) and market prices
+├── archidekt.py    # public decklist crawler
+└── ml/             # suggestion engine (training and inference)
 ```
 
 ## Known limitations
 
-- Partner commanders, companions, and MDFC commanders are rejected from the
-  corpus and unsupported in validation (v1 scope).
-- Photo import targets decklist photos/screenshots, not spreads of physical
-  cards on a table.
-- PPMI scores staples near zero (Sol Ring co-occurs with everything, which is
-  exactly what its popularity predicts), and recommendations skew toward
-  popular cards — rare cards are scored mostly from structured features.
-- The reward is a statistic of the same corpus the behavior policy comes
-  from, so expect the CQL-over-BC margin to be modest; the BC baseline is the
-  honest yardstick, not a fallback.
+- Partner commanders and companions are supported; MDFC commanders are not.
+- Photo import works on decklist photos and screenshots. Spread-of-cards-on-a-table photos are not supported.
+- The suggestion engine does not recommend lands. Add those yourself based on the land count gap reported at the end of `recommend` and `complete`.
+- Very rare cards may get generic suggestions because the model has seen them in few real decks.

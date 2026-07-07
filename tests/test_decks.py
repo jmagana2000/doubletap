@@ -152,3 +152,62 @@ def test_real_vision_ocr_smoke(tmp_path):
 
     lines = recognize_text(Path(image))
     assert lines and all(0.0 <= conf <= 1.0 for _, conf in lines)
+
+
+def test_parse_text_lines_companion_section():
+    parsed = parse_text_lines(
+        [
+            "Companion",
+            "1 Lurrus of the Dream-Den",
+            "Deck",
+            "4 Lightning Bolt",
+        ]
+    )
+    assert parsed[0].is_companion and not parsed[0].is_commander
+    assert not parsed[1].is_companion
+
+
+def test_resolve_companion_outside_deck(loaded_conn):
+    result = resolve(
+        loaded_conn,
+        [
+            ParsedLine(
+                raw="Lurrus of the Dream-Den",
+                qty=1,
+                name="Lurrus of the Dream-Den",
+                is_companion=True,
+            ),
+            _line("Lightning Bolt", qty=4),
+        ],
+        "modern",
+    )
+    assert result.ok
+    assert result.deck.companion is not None
+    assert result.deck.companion not in result.deck.entries
+    assert result.deck.size() == 4  # companion never counts toward deck size
+
+
+def test_partner_and_companion_save_load_round_trip(loaded_conn, tmp_path):
+    result = resolve(
+        loaded_conn,
+        [
+            _line("Thrasios, Triton Hero", is_commander=True),
+            _line("Tymna the Weaver", is_commander=True),
+            ParsedLine(
+                raw="Lurrus of the Dream-Den",
+                qty=1,
+                name="Lurrus of the Dream-Den",
+                is_companion=True,
+            ),
+            _line("Sol Ring"),
+        ],
+        "commander",
+    )
+    assert result.ok
+    path = tmp_path / "deck.json"
+    result.deck.save(loaded_conn, path)
+    loaded = decks.Deck.load(path)
+    assert loaded.commander == result.deck.commander
+    assert loaded.partner == result.deck.partner
+    assert loaded.companion == result.deck.companion
+    assert loaded.size() == 3  # two commanders + Sol Ring, companion excluded

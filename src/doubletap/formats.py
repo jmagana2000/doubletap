@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 from dataclasses import dataclass
 
@@ -45,6 +46,73 @@ MODERN = FormatConfig(
 
 FORMATS = {f.name: f for f in (COMMANDER, MODERN)}
 
+# WotC Commander Brackets Beta — cards that count toward the bracket threshold.
+# 0 in a deck → Bracket 1/2; 1-3 → Bracket 3; 4+ → Bracket 4/5.
+# Source: https://magic.wizards.com/en/news/announcements/introducing-commander-brackets-beta
+GAME_CHANGERS: frozenset[str] = frozenset(
+    {
+        # Best-in-class tutors
+        "Demonic Tutor",
+        "Vampiric Tutor",
+        "Enlightened Tutor",
+        "Worldly Tutor",
+        "Mystical Tutor",
+        "Imperial Seal",
+        "Gamble",
+        "Lim-Dûl's Vault",
+        "Tainted Pact",
+        # Lock-out / information denial
+        "Drannith Magistrate",
+        "Opposition Agent",
+        # Fast mana
+        "Chrome Mox",
+        "Mana Crypt",
+        "Mana Vault",
+        "Mox Diamond",
+        "Jeweled Lotus",
+        "Grim Monolith",
+        "Ancient Tomb",
+        # Resource snowball
+        "Smothering Tithe",
+        "Rhystic Study",
+        # Win-condition engines
+        "Thassa's Oracle",
+        "Underworld Breach",
+        "Dockside Extortionist",
+        "Food Chain",
+        "Survival of the Fittest",
+        "Cyclonic Rift",
+        # Problem commanders (flagged, not banned)
+        "Urza, Lord High Artificer",
+        "Tergrid, God of Fright",
+        "Grand Arbiter Augustin IV",
+    }
+)
+
+
+BRACKETS = {
+    1: "Exhibition  — ultra-casual, no Game Changers, no combos, no land denial",
+    2: "Core        — precon power, no Game Changers, no combos",
+    3: "Upgraded    — optimized, up to 3 Game Changers, no early infinite combos",
+    4: "Optimized   — high-power, unrestricted (banned list only)",
+    5: "cEDH        — competitive tournament play",
+}
+
+
+def compute_bracket(card_names: list[str]) -> tuple[int, list[str]]:
+    """Return (bracket_number, list_of_game_changers_present) for a card name list."""
+    found = [n for n in card_names if n in GAME_CHANGERS]
+    count = len(found)
+    if count == 0:
+        bracket = (
+            2  # assume Core rather than Exhibition; Exhibition requires manual check
+        )
+    elif count <= 3:
+        bracket = 3
+    else:
+        bracket = 4
+    return bracket, found
+
 
 def get_format(name: str) -> FormatConfig:
     try:
@@ -90,6 +158,139 @@ def can_be_commander(card: dict) -> bool:
 
 def has_partner_keyword(card: dict) -> bool:
     return any(k.startswith("Partner") for k in card.get("keywords", []))
+
+
+def has_companion_keyword(card: dict) -> bool:
+    return "Companion" in card.get("keywords", [])
+
+
+# --- Companion deckbuilding restrictions --------------------------------------
+# Each rule receives every starting-deck card as (card, qty) — commander
+# included, companion excluded — and returns a violation message or None.
+
+_PERMANENT_TYPES = (
+    "Creature",
+    "Artifact",
+    "Enchantment",
+    "Land",
+    "Planeswalker",
+    "Battle",
+)
+_KAHEERA_TYPES = ("Cat", "Elemental", "Nightmare", "Dinosaur", "Beast")
+_CARD_TYPES = {
+    "Creature",
+    "Artifact",
+    "Enchantment",
+    "Instant",
+    "Sorcery",
+    "Planeswalker",
+    "Battle",
+}
+
+
+def _mv(card: dict) -> int:
+    return int(card.get("cmc") or 0)
+
+
+def _is_permanent(card: dict) -> bool:
+    front = card["type_line"].split("//")[0]
+    return any(t in front for t in _PERMANENT_TYPES)
+
+
+def _rule_lurrus(entries, fmt):
+    for card, _ in entries:
+        if _is_permanent(card) and _mv(card) > 2:
+            return f"{card['name']} is a permanent with mana value over 2"
+
+
+def _rule_keruga(entries, fmt):
+    for card, _ in entries:
+        if not is_land(card) and _mv(card) < 3:
+            return f"{card['name']} has mana value under 3"
+
+
+def _rule_gyruda(entries, fmt):
+    for card, _ in entries:
+        if _mv(card) % 2 != 0:
+            return f"{card['name']} has an odd mana value"
+
+
+def _rule_obosh(entries, fmt):
+    for card, _ in entries:
+        if not is_land(card) and _mv(card) % 2 == 0:
+            return f"{card['name']} has an even mana value"
+
+
+def _rule_kaheera(entries, fmt):
+    for card, _ in entries:
+        front = card["type_line"].split("//")[0]
+        if "Creature" in front and not any(t in front for t in _KAHEERA_TYPES):
+            return (
+                f"{card['name']} is not a Cat, Elemental, Nightmare, Dinosaur, or Beast"
+            )
+
+
+def _rule_umori(entries, fmt):
+    shared = None
+    for card, _ in entries:
+        if is_land(card):
+            continue
+        types = _CARD_TYPES & set(card["type_line"].split("//")[0].split())
+        shared = types if shared is None else shared & types
+        if not shared:
+            return (
+                f"nonland cards do not all share a card type ({card['name']} differs)"
+            )
+
+
+def _rule_jegantha(entries, fmt):
+    for card, _ in entries:
+        symbols = [
+            s
+            for s in re.findall(r"\{([^}]+)\}", card.get("mana_cost") or "")
+            if not s.isdigit()
+        ]
+        for s in set(symbols):
+            if symbols.count(s) > 1:
+                return f"{card['name']} has more than one {{{s}}} in its mana cost"
+
+
+def _rule_lutri(entries, fmt):
+    for card, qty in entries:
+        if qty > 1 and not is_land(card):
+            return f"{qty}x {card['name']} — nonland cards must be singleton"
+
+
+def _rule_zirda(entries, fmt):
+    for card, _ in entries:
+        if (
+            _is_permanent(card)
+            and not is_land(card)
+            and ":" not in card.get("oracle_text", "")
+        ):
+            return f"{card['name']} is a permanent with no activated ability"
+
+
+def _rule_yorion(entries, fmt):
+    if fmt.exact_size:
+        return f"Yorion cannot be a companion in {fmt.name} (deck size is fixed)"
+    total = sum(qty for _, qty in entries)
+    if total < fmt.deck_size + 20:
+        return f"deck must be at least {fmt.deck_size + 20} cards, got {total}"
+
+
+COMPANION_RULES = {
+    "Gyruda, Doom of Depths": _rule_gyruda,
+    "Jegantha, the Wellspring": _rule_jegantha,
+    "Kaheera, the Orphanguard": _rule_kaheera,
+    "Keruga, the Macrosage": _rule_keruga,
+    "Lurrus of the Dream-Den": _rule_lurrus,
+    "Lutri, the Spellchaser": _rule_lutri,
+    "Obosh, the Preypiercer": _rule_obosh,
+    "Umori, the Collector": _rule_umori,
+    "Yorion, Sky Nomad": _rule_yorion,
+    "Zirda, the Dawnwaker": _rule_zirda,
+}
 
 
 def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
@@ -156,6 +357,37 @@ def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
                         )
                     )
                 identity |= set(partner.get("color_identity", []))
+
+    if deck.companion is not None:
+        comp = get_card(conn, deck.companion)
+        # legality and color identity apply to the companion like any card,
+        # but it sits outside the starting deck (size, copies, restrictions)
+        cards[deck.companion] = comp
+        if not has_companion_keyword(comp):
+            violations.append(
+                Violation(
+                    "invalid_companion",
+                    f"{comp['name']} does not have the Companion ability",
+                    deck.companion,
+                )
+            )
+        else:
+            rule = COMPANION_RULES.get(comp["name"])
+            if rule is not None:
+                starting = [
+                    (cards[oid], qty)
+                    for oid, qty in deck.entries.items()
+                    if oid != deck.companion
+                ] + [(cards[oid], 1) for oid in commander_oids]
+                problem = rule(starting, fmt)
+                if problem:
+                    violations.append(
+                        Violation(
+                            "companion_restriction",
+                            f"{comp['name']}: {problem}",
+                            deck.companion,
+                        )
+                    )
 
     for oid, card in cards.items():
         status = card["legalities"].get(fmt.legality_key, "not_legal")

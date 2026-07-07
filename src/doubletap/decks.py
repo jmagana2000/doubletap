@@ -17,7 +17,14 @@ _QTY_RE = re.compile(r"^(\d+)\s*[xX]?\s+(.+)$")
 _SET_TAIL_RE = re.compile(r"\s+\([A-Za-z0-9]{2,6}\)\s+[\w★-]+\s*$")
 _MARKER_RE = re.compile(r"\s*\*(CMDR|F|E)\*\s*", re.IGNORECASE)
 
+# Patterns that disqualify a line from being a card name in physical card OCR
+_NON_NAME_TOKENS = re.compile(
+    r"\b(?:Creature|Instant|Sorcery|Artifact|Enchantment|Land|Planeswalker|Battle)\b"
+)
+_COLLECTOR_OR_PT = re.compile(r"^\d+$|^\d+[/\\]\d+|^[A-Z]\s+\d+$")
+
 _COMMANDER_SECTIONS = {"commander", "commanders"}
+_COMPANION_SECTIONS = {"companion"}
 _SKIPPED_SECTIONS = {"sideboard", "side", "maybeboard", "considering", "tokens"}
 
 
@@ -27,8 +34,10 @@ class Deck:
     entries: Counter = field(default_factory=Counter)  # oracle_id -> qty
     commander: str | None = None  # oracle_id
     partner: str | None = None  # oracle_id; set only for partner-commander pairs
+    companion: str | None = None  # oracle_id; sits outside the starting deck
 
     def size(self) -> int:
+        # the companion is not part of the starting deck, so it never counts
         return (
             sum(self.entries.values())
             + (1 if self.commander else 0)
@@ -54,6 +63,11 @@ class Deck:
                 if self.partner
                 else None
             ),
+            "companion": (
+                {"oracle_id": self.companion, "name": named(self.companion)}
+                if self.companion
+                else None
+            ),
             "cards": [
                 {"oracle_id": oid, "name": named(oid), "qty": qty}
                 for oid, qty in sorted(
@@ -71,6 +85,8 @@ class Deck:
             deck.commander = doc["commander"]["oracle_id"]
         if doc.get("partner"):
             deck.partner = doc["partner"]["oracle_id"]
+        if doc.get("companion"):
+            deck.companion = doc["companion"]["oracle_id"]
         for card in doc["cards"]:
             deck.entries[card["oracle_id"]] += card["qty"]
         return deck
@@ -82,6 +98,7 @@ class ParsedLine:
     qty: int
     name: str
     is_commander: bool = False
+    is_companion: bool = False
 
 
 @dataclass
@@ -115,7 +132,7 @@ def parse_text_lines(lines: list[str]) -> list[ParsedLine]:
         if not line or line.startswith(("#", "//")):
             continue
         header = line.rstrip(":").casefold()
-        if header in _COMMANDER_SECTIONS | _SKIPPED_SECTIONS | {
+        if header in _COMMANDER_SECTIONS | _COMPANION_SECTIONS | _SKIPPED_SECTIONS | {
             "deck",
             "mainboard",
             "main",
@@ -125,6 +142,7 @@ def parse_text_lines(lines: list[str]) -> list[ParsedLine]:
         if section in _SKIPPED_SECTIONS:
             continue
         is_commander = section in _COMMANDER_SECTIONS
+        is_companion = section in _COMPANION_SECTIONS
         if (
             _MARKER_RE.search(line)
             and "cmdr" in _MARKER_RE.search(line).group(1).casefold()
@@ -135,7 +153,13 @@ def parse_text_lines(lines: list[str]) -> list[ParsedLine]:
         m = _QTY_RE.match(line)
         qty, name = (int(m.group(1)), m.group(2)) if m else (1, line)
         parsed.append(
-            ParsedLine(raw=raw.strip(), qty=qty, name=name, is_commander=is_commander)
+            ParsedLine(
+                raw=raw.strip(),
+                qty=qty,
+                name=name,
+                is_commander=is_commander,
+                is_companion=is_companion,
+            )
         )
     return parsed
 
@@ -208,9 +232,25 @@ def resolve(
                     result.deck.commander = matches[0].oracle_id
                 else:
                     result.deck.partner = matches[0].oracle_id
+            elif line.is_companion:
+                result.deck.companion = matches[0].oracle_id
             else:
                 result.deck.entries[matches[0].oracle_id] += line.qty
     return result
+
+
+def _looks_like_card_name(text: str) -> bool:
+    """Heuristic: could this OCR line be an MTG card name?
+    Rejects type lines, P/T, collector numbers, and pure non-alpha strings."""
+    if len(text) < 2 or len(text) > 60:
+        return False
+    if not any(c.isalpha() for c in text):
+        return False
+    if _COLLECTOR_OR_PT.match(text):
+        return False
+    if _NON_NAME_TOKENS.search(text):
+        return False
+    return True
 
 
 def load_lines(path: Path) -> list[ParsedLine]:
@@ -221,6 +261,21 @@ def load_lines(path: Path) -> list[ParsedLine]:
     if path.suffix.casefold() in IMAGE_SUFFIXES:
         from .ocr import recognize_text
 
-        lines = [text for text, conf in recognize_text(path) if conf >= 0.3]
-        return parse_text_lines(lines)
+        try:
+            raw = recognize_text(path)
+        except RuntimeError as e:
+            raise ValueError(f"Could not read image {path.name}: {e}") from e
+
+        lines_with_conf = [(text, conf) for text, conf in raw if conf >= 0.3]
+        texts = [text for text, _ in lines_with_conf]
+
+        # Decklist screenshots have quantity-prefixed lines ("4 Lightning Bolt").
+        # Physical card photos don't — extract just the card name from the first
+        # OCR line that passes the name heuristic.
+        if not any(_QTY_RE.match(t) for t in texts):
+            for text, _conf in lines_with_conf:
+                if _looks_like_card_name(text):
+                    return [ParsedLine(raw=text, qty=1, name=text)]
+
+        return parse_text_lines(texts)
     return parse_text_lines(path.read_text(encoding="utf-8").splitlines())

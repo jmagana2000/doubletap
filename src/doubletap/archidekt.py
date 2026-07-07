@@ -21,7 +21,15 @@ USER_AGENT = "DoubleTap/0.1 (joshua.magana@gmail.com)"
 # deckFormat=3 returns Commander decks (7 is Custom — do not trust folklore ids)
 FORMAT_IDS = {"commander": 3, "modern": 2}
 
-_DROPPED_CATEGORIES = {"sideboard", "maybeboard", "considering", "wishlist", "tokens"}
+_DROPPED_CATEGORIES = {
+    "sideboard",
+    "maybeboard",
+    "considering",
+    "wishlist",
+    "tokens",
+    # the companion sits outside the starting deck; v1 corpus ignores it
+    "companion",
+}
 MAX_UNRESOLVED_FRACTION = 0.02
 
 

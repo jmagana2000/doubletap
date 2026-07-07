@@ -47,6 +47,12 @@ def data_home() -> Path:
     return Path(os.environ.get("DOUBLETAP_HOME", str(Path.home() / ".doubletap")))
 
 
+def decks_dir() -> Path:
+    path = data_home() / "decks"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
     path = db_path or data_home() / "doubletap.db"
     path.parent.mkdir(parents=True, exist_ok=True)
