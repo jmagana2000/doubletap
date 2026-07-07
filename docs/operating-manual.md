@@ -79,10 +79,21 @@ shows its options.
 
 ### 3.1 `cards` — the local card database
 
-| Command | Options | Behavior |
+**`cards sync`** — downloads Scryfall bulk data into the cache. Skips the
+download when Scryfall's data hasn't changed.
+
+| Parameter | Default | Description |
 |---|---|---|
-| `cards sync` | `--force` | Downloads Scryfall bulk data into the cache. Skips the download when Scryfall's data hasn't changed; `--force` re-downloads regardless (use to refresh **prices**). |
-| `cards lookup NAME` | — | Resolves a name (typo-tolerant, accent-insensitive, face-aware). Prints score (string-match confidence, 0–100), name, color identity, and oracle_id per candidate. Exits 1 if nothing matches. |
+| `--force` | off | Re-download even when the cache is current. Use this to refresh **prices**, which are frozen at the last sync |
+
+**`cards lookup NAME`** — resolves a card name (typo-tolerant,
+accent-insensitive, face-aware). Prints score (string-match confidence,
+0–100), name, color identity, and oracle_id per candidate. Exits 1 if
+nothing matches.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `NAME` | required | The card name to look up; typos and partial names are fine |
 
 ### 3.2 `deck` — building and inspecting decks
 
@@ -90,14 +101,15 @@ shows its options.
 exports), images (`.heic .jpg .png .webp .tiff .bmp` → OCR), anything else as
 a plain-text list.
 
-| Option | Default | Meaning |
+| Parameter | Default | Description |
 |---|---|---|
-| `--format`, `-f` | `commander` | `commander` or `modern`; changeable later at merge |
+| `PATH` | required | The file to import: CSV export, photo/screenshot, or text decklist |
+| `--format`, `-f` | `commander` | Deck format, `commander` or `modern`; changeable later at merge |
 | `--out`, `-o` | auto | Output path. Default: `~/.doubletap/decks/<name>.json`, where `<name>` is the card name for single-card photo imports (collision-safe `-2`, `-3` suffixes), else the source file's stem |
-| `--commander` | — | Set the commander by name |
-| `--companion` | — | Set the companion by name |
-| `--threshold` | 90.0 | Fuzzy auto-accept score; matches at/above it (with a clear gap to the runner-up) import as `assumed` |
-| `--interactive/--no-interactive` | interactive | Prompt to settle ambiguous/unmatched names in a terminal |
+| `--commander` | — | Card name to set as the commander |
+| `--companion` | — | Card name to set as the companion (sits outside the deck) |
+| `--threshold` | 90.0 | Fuzzy auto-accept score (0–100); matches at/above it (with a clear gap to the runner-up) import as `assumed` |
+| `--interactive/--no-interactive` | interactive | Whether to prompt to settle ambiguous/unmatched names in a terminal |
 
 Text-list syntax: `4 Lightning Bolt` or `4x ...` or a bare name (qty 1);
 `# comments` and `// comments`; section headers `Deck`, `Commander`,
@@ -106,47 +118,173 @@ Text-list syntax: `4 Lightning Bolt` or `4x ...` or a bare name (qty 1);
 Imports never guess silently: ambiguous/unmatched lines abort the import
 (exit 1) unless settled interactively.
 
-| Command | Behavior |
-|---|---|
-| `deck list` | Table of every deck in `~/.doubletap/decks/`: file, format, card count, commander (or contents for small commander-less files) |
-| `deck show PATH` | Every card in one deck: commander/partner/companion slots, then quantities, alphabetical |
-| `deck add PATH NAME` | Add a card (`-n`/`--qty` copies, default 1). Exact name required. Warns on rule violations the add causes (copy limit, color identity) but saves anyway. Exit 1 on unresolved names, nothing written |
-| `deck remove PATH NAME` | Remove `-n` copies (default 1; capped at what's there). Removing the commander/partner/companion by name clears that slot. Exit 1 if the card isn't in the deck |
-| `deck commander PATH [NAME]` | Without NAME: show current commander and its color identity. With NAME: set/change the commander (`--partner "Name"` for partners). The old commander returns to the main deck; a promoted card leaves it — count is preserved. Requires an exact name; typos get suggestions, not guesses |
-| `deck merge PATH PATH...` | Combine ≥2 deck files. `-o` output (default `decks/merged.json`); `--format` overrides (required when inputs disagree). First commander/companion wins; others are noted |
-| `deck validate PATH` | Format legality: banned/not-legal cards, size, copy limits (basic-land and "any number" exemptions), commander eligibility, color identity, partner legality, all ten companion restrictions. Exit 0 clean / 1 with violations |
-| `deck bracket PATH` | Commander Bracket (1–5) from the Game Changers count: 0 → Bracket 1/2, 1–3 → 3, 4+ → 4. Lists the Game Changers present |
-| `deck analyze PATH` | Structural report: role counts vs Commander targets, tutor count, interaction speed, mana curve, color balance (flags colors your lands can't support), ways to win (direct/combat/evasion/poison/mill), market price. Heuristic — see `docs/gameplay-blindspots.md` |
-| `deck price PATH` | Total USD (Scryfall market, cheapest finish) + the `--top` (default 10) most expensive cards; lists unpriced cards |
+**`deck list`** — table of every deck in `~/.doubletap/decks/`: file, format,
+card count, commander (or contents for small commander-less files). No
+parameters.
+
+**`deck show PATH`** — every card in one deck: commander/partner/companion
+slots, then quantity, name, mana cost, and type line per card, alphabetical.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH` | required | The deck JSON file to display |
+
+**`deck add PATH NAME`** — add a card. Warns on rule violations the add
+causes (copy limit, color identity) but saves anyway. Exit 1 on unresolved
+names, nothing written.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH` | required | The deck JSON file to modify |
+| `NAME` | required | Card to add; must match exactly (typos get suggestions) |
+| `--qty`, `-n` | 1 | How many copies to add |
+
+**`deck remove PATH NAME`** — remove a card. Removing the
+commander/partner/companion by name clears that slot. Exit 1 if the card
+isn't in the deck.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH` | required | The deck JSON file to modify |
+| `NAME` | required | Card to remove; must match exactly |
+| `--qty`, `-n` | 1 | How many copies to remove (capped at what's there) |
+
+**`deck commander PATH [NAME]`** — show, set, or change the commander. When
+changing, the old commander returns to the main deck and a promoted card
+leaves it, so the card count is preserved.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH` | required | The deck JSON file |
+| `NAME` | — | Card to make the commander. Omit to just show the current commander and its color identity |
+| `--partner` | — | Second commander's name (both cards need the Partner ability) |
+
+**`deck merge PATH PATH...`** — combine two or more deck files into one.
+First commander/companion wins; extras are noted.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH...` | required | Two or more deck JSON files to merge |
+| `--out`, `-o` | `decks/merged.json` | Where to write the merged deck |
+| `--format`, `-f` | inputs' format | Format for the result; required when the inputs disagree |
+
+**`deck validate PATH`** — prints the deck's identity first (format, size,
+commander + color identity, companion — even when the deck is incomplete),
+then every rule problem: banned/not-legal cards, size, copy limits
+(basic-land and "any number" exemptions), commander eligibility, color
+identity, partner legality, all ten companion restrictions. Exit 0 clean /
+1 with violations.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH` | required | The deck JSON file to check |
+
+**`deck bracket PATH`** — Commander Bracket (1–5) from the Game Changers
+count: 0 → Bracket 1/2, 1–3 → 3, 4+ → 4. Lists the Game Changers present.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH` | required | The deck JSON file to rate |
+
+**`deck analyze PATH`** — structural report: role counts vs Commander
+targets, tutor count, interaction speed, mana curve, color balance (flags
+colors your lands can't support), ways to win (direct/combat/evasion/
+poison/mill), market price. Heuristic — see `docs/gameplay-blindspots.md`.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH` | required | The deck JSON file to analyze |
+
+**`deck price PATH`** — total USD (Scryfall market, cheapest finish) plus
+the most expensive cards; lists unpriced cards.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH` | required | The deck JSON file to price |
+| `--top` | 10 | How many of the most expensive cards to list |
 
 ### 3.3 `corpus` — training data (advanced)
 
-| Command | Options | Behavior |
+**`corpus crawl`** — crawls public Archidekt decks at ~1/s with backoff.
+Fully resumable; fetched decks are never re-requested. Only decks passing
+full format validation enter the corpus.
+
+| Parameter | Default | Description |
 |---|---|---|
-| `corpus crawl` | `-f` (required), `--max` (default 1000), `--order-by` (default `-viewCount`) | Crawls public Archidekt decks at ~1/s with backoff. Fully resumable; fetched decks are never re-requested. Only decks passing full format validation enter the corpus |
-| `corpus stats` | — | Per-format counts by status: `parsed` (usable), `rejected` (failed a filter), `gone` (deleted/private, skipped forever) |
-| `corpus pmi` | `-f` (required), `--min-count` (default 20), `--top` (default 20) | Builds the card-synergy (PPMI) table used for training rewards and recommendation rationale; prints top pairs as a sanity check |
+| `--format`, `-f` | required | Which format's decks to crawl (`commander` or `modern`) |
+| `--max` | 1000 | How many new deck ids to queue this run (0 = just fetch the existing queue) |
+| `--order-by` | `-viewCount` | Archidekt search ordering; different orderings reach different decks |
+
+**`corpus stats`** — per-format counts by status: `parsed` (usable),
+`rejected` (failed a filter), `gone` (deleted/private, skipped forever). No
+parameters.
+
+**`corpus pmi`** — builds the card-synergy (PPMI) table used for training
+rewards and recommendation rationale; prints top pairs as a sanity check.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--format`, `-f` | required | Which format's corpus to analyze |
+| `--min-count` | 20 | Minimum number of decks a card pair must share to count as synergy (higher = fewer, more reliable pairs) |
+| `--top` | 20 | How many top synergy pairs to print |
 
 For long crawls keep the machine awake: `caffeinate -is doubletap corpus crawl ...`
 
 ### 3.4 `train` / `eval` — models (advanced)
 
-| Command | Options | Behavior |
+**`train bc`** — trains the behavior-cloning baseline (the default model for
+suggestions). Refuses to run on fewer than 20 parsed decks. Writes
+`models/bc_<format>.pt`.
+
+| Parameter | Default | Description |
 |---|---|---|
-| `train bc` | `-f` (required), `--steps` (default 1500), `--seed` | Behavior-cloning baseline. Refuses to run on < 20 parsed decks. Writes `models/bc_<format>.pt` |
-| `train cql` | `-f` (required), `--steps`, `--alpha` (default 1.0), `--seed`, `--init-from-bc/--no-init-from-bc` | CQL variant; requires the PMI table first. Writes `models/cql_<format>.pt` |
-| `eval --model PATH` | `--n-hide` (default 10), `--seed` | Held-out recovery@k: hides cards from unseen decks, measures how many the model ranks highly. Higher is better |
+| `--format`, `-f` | required | Which format to train for |
+| `--steps` | 1500 | Training steps; more = longer training, usually better up to a point |
+| `--seed` | 0 | Random seed, for reproducible training runs |
+
+**`train cql`** — trains the CQL variant (an experimental alternative);
+requires the PMI table first. Writes `models/cql_<format>.pt`.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--format`, `-f` | required | Which format to train for |
+| `--steps` | 1500 | Training steps |
+| `--alpha` | 1.0 | Conservative-penalty weight; higher keeps the model closer to what human decks actually do |
+| `--seed` | 0 | Random seed |
+| `--init-from-bc/--no-init-from-bc` | on | Start from the BC checkpoint's weights when one exists |
+
+**`eval`** — held-out recovery@k: hides cards from unseen decks and measures
+how many the model ranks highly. Higher is better.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--model` | required | Path to the checkpoint to evaluate |
+| `--n-hide` | 10 | How many cards to hide from each test deck |
+| `--seed` | 0 | Random seed controlling which cards are hidden |
 
 ### 3.5 `recommend` / `complete` — suggestions
 
-| Command | Options | Behavior |
-|---|---|---|
-| `recommend --deck PATH` | `-k` (default 20), `--model`, `--personalize` (default 0.3), `--max-card-price` | Top-k legal, nonland additions with synergy rationale ("with Sol Ring (10.5)") and a land-count gap report. Model defaults to `bc_<format>.pt`, falling back to `cql_<format>.pt` |
-| `complete --deck PATH` | `-o`, `--model`, `--max-card-price` | Greedily fills nonland slots (re-scoring after each add), tells you how many lands remain. `-o` writes the result |
+**`recommend`** — top-k legal, nonland additions for a partial deck, with
+synergy rationale ("with Sol Ring (10.5)") and a land-count gap report.
 
-`--personalize` (0–1) blends the model score with card frequencies among
-corpus decks most similar to yours. `--max-card-price` is a per-card USD cap;
-unpriced cards stay eligible.
+| Parameter | Default | Description |
+|---|---|---|
+| `--deck` | required | The deck JSON file to suggest additions for |
+| `-k` | 20 | How many suggestions to show |
+| `--model` | auto | Checkpoint to use; defaults to `bc_<format>.pt`, falling back to `cql_<format>.pt` |
+| `--personalize` | 0.3 | 0–1 blend of the model score with card frequencies among corpus decks most similar to yours; higher favors decks like yours, 0 disables |
+| `--max-card-price` | none | Per-card USD budget cap; only cards at or under this market price are suggested (unpriced cards stay eligible) |
+
+**`complete`** — greedily fills the deck's nonland slots (re-scoring after
+each add) and tells you how many lands remain to add.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--deck` | required | The deck JSON file to complete |
+| `--out`, `-o` | none | Write the completed deck to this path (omit for a dry run) |
+| `--model` | auto | Checkpoint to use; same default chain as `recommend` |
+| `--max-card-price` | none | Per-card USD budget cap on added cards |
+| `--bracket` | 3 | Target Commander Bracket for the result: 1–2 add no Game Changers, 3 caps the deck at three total (counting existing ones), 4–5 unrestricted. Ignored for Modern |
 
 Lands are never suggested by design — add them yourself using the gap report
 and the color-balance section of `deck analyze`.

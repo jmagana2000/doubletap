@@ -39,13 +39,18 @@ def cards_sync(
 _COLOR_NAMES = {"W": "white", "U": "blue", "B": "black", "R": "red", "G": "green"}
 
 
-def _identity_label(conn, oid: str) -> str:
-    """Human-readable color identity, e.g. 'WUBG (white, blue, black, green)'."""
-    card = formats.get_card(conn, oid)
-    letters = [c for c in "WUBRG" if c in (card.get("color_identity") or [])]
+def _colors_label(colors) -> str:
+    """Spell out a set of color letters: 'WUR (white, blue, red)'."""
+    letters = [c for c in "WUBRG" if c in colors]
     if not letters:
         return "colorless"
     return "".join(letters) + " (" + ", ".join(_COLOR_NAMES[c] for c in letters) + ")"
+
+
+def _identity_label(conn, oid: str) -> str:
+    """Human-readable color identity of one card."""
+    card = formats.get_card(conn, oid)
+    return _colors_label(card.get("color_identity") or [])
 
 
 @cards_app.command("lookup")
@@ -236,9 +241,8 @@ def deck_commander(
             if deck.partner:
                 current += f" + {_card_name_by_oid(conn, deck.partner)}"
                 identity |= set(formats.get_card(conn, deck.partner)["color_identity"])
-            letters = "".join(c for c in "WUBRG" if c in identity) or "colorless"
             typer.echo(f"Commander: {current}")
-            typer.echo(f"Color identity: {letters}")
+            typer.echo(f"Color identity: {_colors_label(identity)}")
         return
 
     def promote(card_name):
@@ -321,27 +325,41 @@ def deck_remove(
 
 @deck_app.command("show")
 def deck_show(path: Path = typer.Argument(..., exists=True, readable=True)):
-    """List every card in a deck, grouped by slot (commander, companion, deck)."""
+    """List every card in a deck with its mana cost and type, grouped by slot
+    (commander, companion, deck)."""
+    import json
+
     conn = db.connect()
     deck = decks.Deck.load(path)
 
-    def named(oid):
+    def card_row(oid):
+        """(name, mana_cost, type_line); falls back to front face for MDFCs."""
         row = conn.execute(
-            "SELECT name FROM cards WHERE oracle_id = ?", (oid,)
+            "SELECT name, json FROM cards WHERE oracle_id = ?", (oid,)
         ).fetchone()
-        return row[0] if row else oid
+        if row is None:
+            return oid, "", ""
+        card = json.loads(row[1])
+        cost = card.get("mana_cost") or ""
+        if not cost and card.get("card_faces"):
+            cost = card["card_faces"][0].get("mana_cost", "")
+        return row[0], cost, card.get("type_line", "")
+
+    def line(qty, oid):
+        name, cost, type_line = card_row(oid)
+        return f"{qty:3}  {name:<40} {cost:<14} {type_line}"
 
     typer.echo(f"{deck.format} deck, {deck.size()} cards")
     if deck.commander:
-        typer.echo(f"\nCommander: {named(deck.commander)}")
+        typer.echo(f"\nCommander:\n{line(1, deck.commander)}")
         if deck.partner:
-            typer.echo(f"Partner:   {named(deck.partner)}")
+            typer.echo(f"Partner:\n{line(1, deck.partner)}")
     if deck.companion:
-        typer.echo(f"Companion: {named(deck.companion)}")
+        typer.echo(f"Companion:\n{line(1, deck.companion)}")
     if deck.entries:
         typer.echo("")
-        for oid, qty in sorted(deck.entries.items(), key=lambda kv: named(kv[0])):
-            typer.echo(f"{qty:3}  {named(oid)}")
+        for oid, qty in sorted(deck.entries.items(), key=lambda kv: card_row(kv[0])[0]):
+            typer.echo(line(qty, oid))
 
 
 @corpus_app.command("crawl")
@@ -567,6 +585,18 @@ def _budget_mask(conn, vocab, max_card_price):
     return mask
 
 
+def _game_changer_idxs(conn, vocab) -> set[int]:
+    """Vocab indices of every Game Changer present in the card cache."""
+    idxs = set()
+    for name in formats.GAME_CHANGERS:
+        row = conn.execute(
+            "SELECT oracle_id FROM cards WHERE name = ?", (name,)
+        ).fetchone()
+        if row and row[0] in vocab.index:
+            idxs.add(vocab.index[row[0]])
+    return idxs
+
+
 def _structure_report(deck, vocab, fmt, partial):
     size = deck.size()
     n_lands = int(vocab.land[partial].sum())
@@ -658,9 +688,20 @@ def complete(
         "--max-card-price",
         help="Budget cap in USD: only add cards at or under this market price",
     ),
+    bracket: int = typer.Option(
+        3,
+        "--bracket",
+        min=1,
+        max=5,
+        help="Target Commander Bracket: 1-2 add no Game Changers, 3 keeps the"
+        " deck at three or fewer, 4-5 unrestricted",
+    ),
 ):
     """Fill a partial deck's nonland slots with the model's top picks (greedy,
-    re-scored after each add). Lands are reported as a gap, not added."""
+    re-scored after each add). Lands are reported as a gap, not added.
+    Stays within the target Commander Bracket (default 3) unless raised."""
+    import numpy as np
+
     from .ml.eval import complete_deck
 
     conn = db.connect()
@@ -674,15 +715,31 @@ def complete(
         if max_card_price is not None
         else None
     )
+    capped_idxs, cap = None, 0
+    if fmt.name == "commander" and bracket <= 3:
+        gc_idxs = _game_changer_idxs(conn, vocab)
+        already = sum(1 for i in (*partial, commander_idx, partner_idx) if i in gc_idxs)
+        cap = max(0, 3 - already) if bracket == 3 else 0
+        capped_idxs = np.array(sorted(gc_idxs), dtype=np.int64)
+
     added, final = complete_deck(
-        model, vocab, fmt, partial, commander_idx, partner_idx, extra_mask
+        model,
+        vocab,
+        fmt,
+        partial,
+        commander_idx,
+        partner_idx,
+        extra_mask,
+        capped_idxs=capped_idxs,
+        cap=cap,
     )
     for idx in added:
         deck.entries[vocab.oracle_ids[idx]] += 1
         typer.echo(f"+ {_card_name(conn, vocab, idx)}")
     lands_needed = fmt.deck_size - deck.size()
+    bracket_note = f", bracket ≤{bracket}" if capped_idxs is not None else ""
     typer.echo(
-        f"\nAdded {len(added)} cards ({ckpt['algo']} model); "
+        f"\nAdded {len(added)} cards ({ckpt['algo']} model{bracket_note}); "
         f"add {lands_needed} lands to reach {fmt.deck_size}."
     )
     _structure_report(deck, vocab, fmt, final)
@@ -864,7 +921,8 @@ def deck_analyze(path: Path = typer.Argument(..., exists=True, readable=True)):
             have = report.sources.get(color, 0) / source_total
             flag = "  ← not enough lands make this color" if color in short else ""
             typer.echo(
-                f"  {color}: {need:4.0%} of symbols, {have:4.0%} of sources{flag}"
+                f"  {_COLOR_NAMES[color]:<6} {need:4.0%} of symbols,"
+                f" {have:4.0%} of sources{flag}"
             )
 
     typer.echo("\nWays to win:")
@@ -938,13 +996,39 @@ def deck_price(
 
 @deck_app.command("validate")
 def deck_validate(path: Path = typer.Argument(..., exists=True, readable=True)):
-    """Check a deck JSON against its format's construction and legality rules."""
+    """Check a deck JSON against its format's construction and legality rules.
+    Always shows the deck's identity (commander, colors, size) first, then
+    every violation — one problem never hides the rest."""
     conn = db.connect()
     deck = decks.Deck.load(path)
+    fmt = formats.get_format(deck.format)
+
+    size_note = (
+        f" (needs exactly {fmt.deck_size})"
+        if fmt.exact_size and deck.size() != fmt.deck_size
+        else f" (needs at least {fmt.deck_size})"
+        if not fmt.exact_size and deck.size() < fmt.deck_size
+        else ""
+    )
+    typer.echo(f"{deck.format} deck, {deck.size()} cards{size_note}")
+    if deck.commander:
+        label = _card_name_by_oid(conn, deck.commander)
+        identity = set(formats.get_card(conn, deck.commander)["color_identity"])
+        if deck.partner:
+            label += f" + {_card_name_by_oid(conn, deck.partner)}"
+            identity |= set(formats.get_card(conn, deck.partner)["color_identity"])
+        typer.echo(f"Commander: {label}")
+        typer.echo(f"Color identity: {_colors_label(identity)}")
+    elif fmt.requires_commander:
+        typer.echo("Commander: none set (use: doubletap deck commander <deck> <name>)")
+    if deck.companion:
+        typer.echo(f"Companion: {_card_name_by_oid(conn, deck.companion)}")
+
     violations = formats.validate(conn, deck)
     if not violations:
-        typer.echo(f"Valid {deck.format} deck ({deck.size()} cards)")
+        typer.echo("\nValid — no violations.")
         return
+    typer.echo(f"\nViolations ({len(violations)}):")
     for v in violations:
-        typer.echo(f"{v.code:16} {v.message}")
+        typer.echo(f"  {v.code:16} {v.message}")
     raise typer.Exit(code=1)

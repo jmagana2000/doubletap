@@ -151,7 +151,7 @@ doubletap deck commander ~/.doubletap/decks/my-deck.json
 doubletap deck show ~/.doubletap/decks/my-deck.json
 ```
 Prints the commander, partner, and companion (when set), then each card with
-its quantity, alphabetically.
+its quantity, mana cost, and type, alphabetically.
 
 **List all saved decks:**
 ```bash
@@ -291,7 +291,10 @@ This checks your deck against the official format rules:
 doubletap deck validate ~/.doubletap/decks/my-deck.json
 ```
 
-It will tell you about:
+It always starts with the deck's identity — format, card count, commander
+(with combined color identity for partners), and companion — even when the
+deck is incomplete, then lists every rule problem found. It will tell you
+about:
 - Banned cards
 - Wrong number of cards (Commander needs exactly 100; Modern needs at least 60)
 - Too many copies of a card (Commander allows only 1 of each; Modern allows 4)
@@ -351,6 +354,14 @@ doubletap complete --deck ~/.doubletap/decks/my-deck.json -o finished.json
 This fills all remaining nonland slots with the model's top picks, re-scoring
 after each addition. When it's done it tells you how many lands to add to
 finish the deck.
+
+By default the result stays at **Commander Bracket 3** — the completed deck
+will hold at most three Game Changers, counting any already in it. Change the
+target with `--bracket`: 1 or 2 adds no Game Changers at all, 4 or 5 removes
+the restriction:
+```bash
+doubletap complete --deck my-deck.json --bracket 2 -o casual.json
+```
 
 **Adjust suggestions to your specific deck style** with `--personalize`
 (default is 0.3, range 0–1). Higher values weight cards that appear in decks

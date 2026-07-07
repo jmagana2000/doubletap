@@ -199,6 +199,29 @@ def test_complete_deck_stops_when_pool_exhausts(rigged_conn):
     assert set(np.unique(np.array(added))) <= set(np.flatnonzero(~vocab.land))
 
 
+def test_complete_deck_caps_limited_cards(rigged_conn):
+    """Bracket-limited cards (Game Changers) may be added at most `cap` times.
+    Relentless Rats is the only repeatable pick in the fixture pool, so once
+    singletons run out the greedy loop wants Rats forever — the cap must stop
+    it."""
+    vocab = build_vocab(rigged_conn, COMMANDER)
+    model = tiny_model(vocab)
+    atraxa = vocab.index[lookup(rigged_conn, "Atraxa, Praetors' Voice")[0].oracle_id]
+    rats = vocab.index[lookup(rigged_conn, "Relentless Rats")[0].oracle_id]
+    capped = np.array([rats], dtype=np.int64)
+    empty = np.empty(0, dtype=np.int64)
+
+    added, _ = complete_deck(
+        model, vocab, COMMANDER, empty, atraxa, capped_idxs=capped, cap=0
+    )
+    assert rats not in added
+
+    added, _ = complete_deck(
+        model, vocab, COMMANDER, empty, atraxa, capped_idxs=capped, cap=2
+    )
+    assert added.count(rats) == 2
+
+
 def test_checkpoint_round_trip_and_vocab_guard(rigged_conn, tmp_path):
     vocab = build_vocab(rigged_conn, COMMANDER)
     model = tiny_model(vocab)

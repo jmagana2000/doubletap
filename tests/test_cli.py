@@ -73,10 +73,13 @@ def test_cards_lookup_found_and_missing(loaded_conn):
 def test_deck_import_and_validate(loaded_conn, tmp_path):
     out = import_deck(tmp_path)
     assert out.exists()
-    # 33 cards: partial deck, so only wrong_size is reported as a note
     result = runner.invoke(app, ["deck", "validate", str(out)])
     assert result.exit_code == 1
     assert "wrong_size" in result.output
+    # deck identity is shown even when the size is wrong
+    assert "Commander: Atraxa, Praetors' Voice" in result.output
+    assert "Color identity: WUBG (white, blue, black, green)" in result.output
+    assert "needs exactly 100" in result.output
 
 
 def test_deck_import_unmatched_exits_nonzero(loaded_conn, tmp_path):
@@ -221,9 +224,13 @@ def test_deck_show_lists_cards(loaded_conn, tmp_path):
     out = import_deck(tmp_path)
     result = runner.invoke(app, ["deck", "show", str(out)])
     assert result.exit_code == 0
-    assert "Commander: Atraxa, Praetors' Voice" in result.output
+    assert "Atraxa, Praetors' Voice" in result.output
     assert " 30  Swamp" in result.output
     assert "  1  Sol Ring" in result.output
+    # every row shows mana cost and type line
+    assert "{1}" in result.output and "Artifact" in result.output
+    assert "Basic Land — Swamp" in result.output
+    assert "{G}{W}{U}{B}" in result.output  # commander's cost shown too
 
 
 # --- deck bracket / analyze / price / validate -----------------------------
@@ -270,7 +277,8 @@ def test_deck_validate_valid_deck(loaded_conn, tmp_path):
     )
     result = runner.invoke(app, ["deck", "validate", str(out)])
     assert result.exit_code == 0
-    assert "Valid commander deck (100 cards)" in result.output
+    assert "commander deck, 100 cards" in result.output
+    assert "Valid — no violations." in result.output
 
 
 # --- corpus ----------------------------------------------------------------
@@ -362,6 +370,13 @@ def test_ml_pipeline_end_to_end(loaded_conn, tmp_path):
     result = runner.invoke(app, ["complete", "--deck", str(deck), "-o", str(out)])
     assert result.exit_code == 0, result.output
     assert out.exists()
+    assert "bracket ≤3" in result.output  # default bracket applies
+
+    result = runner.invoke(
+        app, ["complete", "--deck", str(deck), "-o", str(out), "--bracket", "5"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "bracket" not in result.output  # 4-5: unrestricted, no cap in play
 
 
 def test_recommend_without_model_exits_cleanly(loaded_conn, tmp_path):

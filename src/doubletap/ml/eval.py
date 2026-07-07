@@ -43,11 +43,15 @@ def complete_deck(
     commander_idx: int | None,
     partner_idx: int | None = None,
     extra_mask: np.ndarray | None = None,
+    capped_idxs: np.ndarray | None = None,
+    cap: int = 0,
 ) -> tuple[list[int], np.ndarray]:
     """Greedily fill the deck's nonland slots (deck size minus the land-target
     slots), re-scoring after each add. Lands stay the user's job. Returns
     (added indices in order, final partial).
 
+    `capped_idxs` cards may be added at most `cap` more times in total
+    (bracket-limited Game Changers); once the budget is spent they are masked.
     Stops early if every remaining action is masked (tiny legal pools)."""
     target_nonland = fmt.deck_size - round(fmt.land_fraction_target * fmt.deck_size)
     if commander_idx is not None:
@@ -57,16 +61,28 @@ def complete_deck(
     partial = partial_idxs.copy()
     added: list[int] = []
     committed = sum(1 for x in (commander_idx, partner_idx) if x is not None)
+    capped_set = set(map(int, capped_idxs)) if capped_idxs is not None else None
+    remaining_cap = cap
     while (
         int((~vocab.land[partial]).sum()) < target_nonland
         and partial.size + committed < fmt.deck_size
     ):
+        mask = extra_mask
+        if capped_set is not None and remaining_cap <= 0:
+            mask = (
+                extra_mask.copy()
+                if extra_mask is not None
+                else np.ones(len(vocab), dtype=bool)
+            )
+            mask[list(capped_set)] = False
         scores = score_state(
-            model, vocab, fmt, partial, commander_idx, partner_idx, extra_mask
+            model, vocab, fmt, partial, commander_idx, partner_idx, mask
         )
         best = int(np.argmax(scores))
         if not np.isfinite(scores[best]):
             break
+        if capped_set is not None and best in capped_set:
+            remaining_cap -= 1
         added.append(best)
         partial = np.append(partial, best)
     return added, partial
