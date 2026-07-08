@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DoubleTap</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#2a2f3a;
+  --text:#e6e9ef; --dim:#9aa3b2; --accent:#7c5cff; --accent2:#4db6ac;
+  --ok:#4caf7d; --err:#e05d5d; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;min-height:100vh}
+nav{width:220px;background:var(--panel);border-right:1px solid var(--border);padding:20px 0;position:sticky;top:0;height:100vh;flex-shrink:0}
+nav h1{font-size:19px;padding:0 20px 14px;letter-spacing:.5px}
+nav h1 span{color:var(--accent)}
+nav a{display:block;padding:9px 20px;color:var(--dim);text-decoration:none;font-size:14px;border-left:3px solid transparent;cursor:pointer}
+nav a:hover{color:var(--text)}
+nav a.active{color:var(--text);border-left-color:var(--accent);background:var(--panel2)}
+nav .group{padding:16px 20px 4px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+main{flex:1;padding:28px 34px;max-width:1100px}
+section{display:none}
+section.active{display:block}
+h2{font-size:21px;margin-bottom:4px}
+.sub{color:var(--dim);font-size:13.5px;margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:18px}
+.card h3{font-size:15px;margin-bottom:10px;color:var(--accent2)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px}
+label{display:block;font-size:12px;color:var(--dim);margin-bottom:3px}
+input,select,textarea{background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:14px;min-width:70px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+textarea{width:100%;font-family:var(--mono);font-size:13px}
+button{background:var(--accent);border:0;border-radius:6px;color:#fff;padding:8px 16px;font-size:14px;cursor:pointer;font-weight:600}
+button:hover{filter:brightness(1.12)}
+button.secondary{background:var(--panel2);border:1px solid var(--border);color:var(--text);font-weight:400}
+button:disabled{opacity:.5;cursor:wait}
+pre.out{background:#0a0c10;border:1px solid var(--border);border-radius:8px;padding:14px;font:12.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word;margin-top:12px;max-height:480px;overflow:auto;display:none}
+pre.out.show{display:block}
+pre.out.err{border-color:var(--err)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.5px;padding:6px 10px;border-bottom:1px solid var(--border)}
+td{padding:8px 10px;border-bottom:1px solid var(--border)}
+tr.deck{cursor:pointer}
+tr.deck:hover{background:var(--panel2)}
+.pill{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:99px;padding:1px 10px;font-size:12px;color:var(--dim)}
+.spin{display:inline-block;color:var(--dim);font-size:13px;margin-left:10px;visibility:hidden}
+.spin.show{visibility:visible}
+.hint{font-size:12.5px;color:var(--dim);margin-top:6px}
+</style>
+</head>
+<body>
+<nav>
+  <h1>Double<span>Tap</span></h1>
+  <a data-nav="decks" class="active">Decks</a>
+  <a data-nav="import">Import</a>
+  <a data-nav="cards">Card Lookup</a>
+  <a data-nav="suggest">Suggestions</a>
+  <div class="group">Advanced</div>
+  <a data-nav="data">Data &amp; Models</a>
+</nav>
+<main>
+
+<!-- ===================== DECKS ===================== -->
+<section id="decks" class="active">
+  <h2>Your decks</h2>
+  <p class="sub">Everything saved in ~/.doubletap/decks/. Click a deck to work with it.</p>
+  <div class="card" data-cmd="deck list">
+    <table>
+      <thead><tr><th>Deck</th><th>Format</th><th>Cards</th><th>Commander</th></tr></thead>
+      <tbody id="deck-rows"><tr><td colspan="4" style="color:var(--dim)">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="deck-detail" style="display:none">
+    <h3 id="dd-title">deck</h3>
+    <div class="row">
+      <button data-cmd="deck show"      onclick="deckAction('show')">Show cards</button>
+      <button data-cmd="deck validate"  class="secondary" onclick="deckAction('validate')">Validate</button>
+      <button data-cmd="deck analyze"   class="secondary" onclick="deckAction('analyze')">Analyze</button>
+      <button data-cmd="deck bracket"   class="secondary" onclick="deckAction('bracket')">Bracket</button>
+      <button data-cmd="deck price"     class="secondary" onclick="deckAction('price')">Price</button>
+      <span class="spin" id="dd-spin">running…</span>
+    </div>
+    <div class="row" data-cmd="deck add">
+      <div><label>Card name</label><input id="dd-card" placeholder="Sol Ring" size="28"></div>
+      <div><label>Qty</label><input id="dd-qty" type="number" value="1" min="1" style="width:70px"></div>
+      <button onclick="deckCard('add')">Add</button>
+      <button data-cmd="deck remove" class="secondary" onclick="deckCard('remove')">Remove</button>
+    </div>
+    <div class="row" data-cmd="deck commander">
+      <div><label>Commander</label><input id="dd-commander" placeholder="exact card name" size="28"></div>
+      <div><label>Partner (optional)</label><input id="dd-partner" size="24"></div>
+      <button class="secondary" onclick="setCommander()">Set commander</button>
+      <button class="secondary" onclick="deckAction('commander')">Show current</button>
+    </div>
+    <pre class="out" id="dd-out"></pre>
+  </div>
+
+  <div class="card" data-cmd="deck merge">
+    <h3>Merge decks</h3>
+    <p class="hint">Combine single-card photo imports (or any decks) into one. Select with ⌘/Ctrl-click.</p>
+    <div class="row">
+      <div><label>Decks to merge (2+)</label><select id="merge-decks" multiple size="6" style="min-width:280px"></select></div>
+      <div><label>Output name</label><input id="merge-out" placeholder="my-deck" size="18"></div>
+      <div><label>Format</label><select id="merge-format"><option value="">keep as-is</option><option>commander</option><option>modern</option></select></div>
+      <button onclick="mergeDecks()">Merge</button>
+    </div>
+    <pre class="out" id="merge-out-pre"></pre>
+  </div>
+</section>
+
+<!-- ===================== IMPORT ===================== -->
+<section id="import">
+  <h2>Import a deck</h2>
+  <p class="sub">Paste a decklist, or give the path of a CSV export or a card photo on this machine.</p>
+
+  <div class="card" data-cmd="deck import">
+    <h3>Paste a decklist</h3>
+    <textarea id="imp-text" rows="9" placeholder="Commander
+1 Atraxa, Praetors' Voice
+Deck
+1 Sol Ring
+36 Forest"></textarea>
+    <div class="row" style="margin-top:10px">
+      <div><label>Format</label><select id="imp-format"><option>commander</option><option>modern</option></select></div>
+      <div><label>Save as</label><input id="imp-name" placeholder="my-deck" size="18"></div>
+      <div><label>Commander (optional)</label><input id="imp-commander" size="22"></div>
+      <div><label>Companion (optional)</label><input id="imp-companion" size="18"></div>
+      <button onclick="importText()">Import</button>
+    </div>
+    <pre class="out" id="imp-out"></pre>
+  </div>
+
+  <div class="card">
+    <h3>From a file on this machine (CSV or photo)</h3>
+    <div class="row">
+      <div style="flex:1"><label>File path</label><input id="impf-path" placeholder="/Users/you/Downloads/IMG_1234.HEIC" style="width:100%"></div>
+      <div><label>Format</label><select id="impf-format"><option>commander</option><option>modern</option></select></div>
+      <button onclick="importFile()">Import</button>
+    </div>
+    <pre class="out" id="impf-out"></pre>
+  </div>
+</section>
+
+<!-- ===================== CARDS ===================== -->
+<section id="cards">
+  <h2>Card lookup</h2>
+  <p class="sub">Typo-tolerant search of the local card database, with color identity per match.</p>
+  <div class="card" data-cmd="cards lookup">
+    <div class="row">
+      <div style="flex:1"><label>Card name</label><input id="lookup-q" placeholder="lightning blot" style="width:100%" onkeydown="if(event.key==='Enter')lookup()"></div>
+      <button onclick="lookup()">Search</button>
+    </div>
+    <pre class="out" id="lookup-out"></pre>
+  </div>
+  <div class="card" data-cmd="cards sync">
+    <h3>Card database</h3>
+    <p class="hint">Downloads ~180 MB from Scryfall when their data changed. Force refreshes market prices.</p>
+    <div class="row">
+      <button onclick="runInto(['cards','sync'],'sync-out',this)">Sync</button>
+      <button class="secondary" onclick="runInto(['cards','sync','--force'],'sync-out',this)">Force refresh (prices)</button>
+    </div>
+    <pre class="out" id="sync-out"></pre>
+  </div>
+</section>
+
+<!-- ===================== SUGGESTIONS ===================== -->
+<section id="suggest">
+  <h2>Suggestions</h2>
+  <p class="sub">Model-driven card recommendations. Needs a trained model (Data &amp; Models tab).</p>
+
+  <div class="card" data-cmd="recommend">
+    <h3>Recommend additions</h3>
+    <div class="row">
+      <div><label>Deck</label><select id="rec-deck" class="deck-select"></select></div>
+      <div><label>How many</label><input id="rec-k" type="number" value="20" min="1" style="width:80px"></div>
+      <div><label>Personalize (0–1)</label><input id="rec-pers" type="number" value="0.3" step="0.1" min="0" max="1" style="width:80px"></div>
+      <div><label>Max $/card (optional)</label><input id="rec-price" type="number" step="0.5" min="0" style="width:100px"></div>
+      <button onclick="recommend()">Recommend</button>
+      <span class="spin" id="rec-spin">running…</span>
+    </div>
+    <pre class="out" id="rec-out"></pre>
+  </div>
+
+  <div class="card" data-cmd="complete">
+    <h3>Auto-complete a deck</h3>
+    <div class="row">
+      <div><label>Deck</label><select id="cmp-deck" class="deck-select"></select></div>
+      <div><label>Save result as</label><input id="cmp-out" placeholder="finished" size="16"></div>
+      <div><label>Bracket (1–5)</label><input id="cmp-bracket" type="number" value="3" min="1" max="5" style="width:70px"></div>
+      <div><label>Max $/card (optional)</label><input id="cmp-price" type="number" step="0.5" min="0" style="width:100px"></div>
+      <button onclick="completeDeck()">Complete</button>
+      <span class="spin" id="cmp-spin">running…</span>
+    </div>
+    <pre class="out" id="cmp-out-pre"></pre>
+  </div>
+</section>
+
+<!-- ===================== DATA & MODELS ===================== -->
+<section id="data">
+  <h2>Data &amp; models</h2>
+  <p class="sub">Build the training corpus and models behind Suggestions. Long-running commands block until done — leave the tab open.</p>
+
+  <div class="card" data-cmd="corpus stats">
+    <h3>Corpus</h3>
+    <div class="row">
+      <button class="secondary" onclick="runInto(['corpus','stats'],'corpus-out',this)">Stats</button>
+      <div><label>Format</label><select id="crawl-format"><option>commander</option><option>modern</option></select></div>
+      <div><label>Max decks</label><input id="crawl-max" type="number" value="1000" style="width:100px"></div>
+      <button data-cmd="corpus crawl" onclick="crawl()">Crawl</button>
+      <button data-cmd="corpus pmi" class="secondary" onclick="runInto(['corpus','pmi','-f',val('crawl-format')],'corpus-out',this)">Build synergy (PMI)</button>
+    </div>
+    <pre class="out" id="corpus-out"></pre>
+  </div>
+
+  <div class="card" data-cmd="train bc">
+    <h3>Train &amp; evaluate</h3>
+    <div class="row">
+      <div><label>Format</label><select id="train-format"><option>commander</option><option>modern</option></select></div>
+      <div><label>Steps</label><input id="train-steps" type="number" value="1500" style="width:100px"></div>
+      <button onclick="runInto(['train','bc','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train BC</button>
+      <button data-cmd="train cql" class="secondary" onclick="runInto(['train','cql','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train CQL</button>
+    </div>
+    <div class="row" data-cmd="eval">
+      <div style="flex:1"><label>Checkpoint path (for eval)</label><input id="eval-model" placeholder="~/.doubletap/models/bc_commander.pt" style="width:100%"></div>
+      <button class="secondary" onclick="runInto(['eval','--model',val('eval-model')],'train-out',this)">Evaluate</button>
+    </div>
+    <pre class="out" id="train-out"></pre>
+  </div>
+</section>
+
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const val = id => $(id).value.trim();
+
+/* nav */
+document.querySelectorAll("nav a[data-nav]").forEach(a => a.onclick = () => {
+  document.querySelectorAll("nav a").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
+  a.classList.add("active");
+  $(a.dataset.nav).classList.add("active");
+  if (a.dataset.nav === "decks" || a.dataset.nav === "suggest") loadDecks();
+});
+
+/* api */
+async function run(args) {
+  const r = await fetch("/api/run", {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "X-DoubleTap": "1"},
+    body: JSON.stringify({args})
+  });
+  return r.json();
+}
+async function runInto(args, outId, btn) {
+  const out = $(outId);
+  if (btn) btn.disabled = true;
+  out.className = "out show"; out.textContent = "running…";
+  try {
+    const res = await run(args);
+    out.textContent = res.output || "(no output)";
+    out.className = "out show" + (res.exit_code ? " err" : "");
+  } catch (e) { out.textContent = "request failed: " + e; out.className = "out show err"; }
+  if (btn) btn.disabled = false;
+}
+
+/* decks */
+let currentDeck = null;
+async function loadDecks() {
+  const decks = await (await fetch("/api/decks")).json();
+  $("deck-rows").innerHTML = decks.length
+    ? decks.map(d => `<tr class="deck" onclick='selectDeck(${JSON.stringify(d)})'>
+        <td>${d.name}</td><td><span class="pill">${d.format}</span></td>
+        <td>${d.cards}</td><td>${d.commander || "<span style='color:var(--dim)'>—</span>"}</td></tr>`).join("")
+    : `<tr><td colspan="4" style="color:var(--dim)">No decks yet — use the Import tab.</td></tr>`;
+  document.querySelectorAll(".deck-select").forEach(sel => {
+    sel.innerHTML = decks.map(d => `<option value="${d.path}">${d.name}</option>`).join("");
+  });
+  const ms = $("merge-decks");
+  ms.innerHTML = decks.map(d => `<option value="${d.path}">${d.name}</option>`).join("");
+}
+function selectDeck(d) {
+  currentDeck = d;
+  $("deck-detail").style.display = "block";
+  $("dd-title").textContent = `${d.name} — ${d.format}, ${d.cards} cards`;
+  deckAction("show");
+}
+async function deckAction(cmd) {
+  if (!currentDeck) return;
+  $("dd-spin").classList.add("show");
+  await runInto(["deck", cmd, currentDeck.path], "dd-out");
+  $("dd-spin").classList.remove("show");
+}
+async function deckCard(action) {
+  if (!currentDeck || !val("dd-card")) return;
+  await runInto(["deck", action, currentDeck.path, val("dd-card"), "-n", val("dd-qty") || "1"], "dd-out");
+  loadDecks();
+}
+async function setCommander() {
+  if (!currentDeck || !val("dd-commander")) return;
+  const args = ["deck", "commander", currentDeck.path, val("dd-commander")];
+  if (val("dd-partner")) args.push("--partner", val("dd-partner"));
+  await runInto(args, "dd-out");
+  loadDecks();
+}
+async function mergeDecks() {
+  const chosen = [...$("merge-decks").selectedOptions].map(o => o.value);
+  if (chosen.length < 2) { alert("Select at least two decks (⌘/Ctrl-click)."); return; }
+  const args = ["deck", "merge", ...chosen];
+  if (val("merge-out")) args.push("-o", `${homeDecks()}/${val("merge-out")}.json`);
+  if (val("merge-format")) args.push("--format", val("merge-format"));
+  await runInto(args, "merge-out-pre");
+  loadDecks();
+}
+function homeDecks() {
+  // decks live next to the ones we listed; derive the folder from any entry
+  const opt = $("merge-decks").options[0];
+  return opt ? opt.value.replace(/\/[^/]+$/, "") : "";
+}
+
+/* import — the server writes the pasted text to a temp file (@TEXT@) and
+   substitutes @DECKS@ with the decks folder */
+async function importText() {
+  const text = $("imp-text").value;
+  if (!text.trim()) return;
+  const args = ["deck", "import", "@TEXT@", "-f", val("imp-format"), "--no-interactive"];
+  if (val("imp-name")) args.push("-o", "@DECKS@/" + val("imp-name") + ".json");
+  if (val("imp-commander")) args.push("--commander", val("imp-commander"));
+  if (val("imp-companion")) args.push("--companion", val("imp-companion"));
+  const r = await fetch("/api/import", {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "X-DoubleTap": "1"},
+    body: JSON.stringify({text, args})
+  });
+  const res = await r.json();
+  const out = $("imp-out");
+  out.textContent = res.output || res.error || "(no output)";
+  out.className = "out show" + (res.exit_code ? " err" : "");
+  loadDecks();
+}
+async function importFile() {
+  if (!val("impf-path")) return;
+  await runInto(["deck", "import", val("impf-path"), "-f", val("impf-format"), "--no-interactive"], "impf-out");
+  loadDecks();
+}
+
+/* cards */
+function lookup() { if (val("lookup-q")) runInto(["cards", "lookup", val("lookup-q")], "lookup-out"); }
+
+/* suggestions */
+async function recommend() {
+  const args = ["recommend", "--deck", val("rec-deck"), "-k", val("rec-k") || "20",
+                "--personalize", val("rec-pers") || "0.3"];
+  if (val("rec-price")) args.push("--max-card-price", val("rec-price"));
+  $("rec-spin").classList.add("show");
+  await runInto(args, "rec-out");
+  $("rec-spin").classList.remove("show");
+}
+async function completeDeck() {
+  const args = ["complete", "--deck", val("cmp-deck"), "--bracket", val("cmp-bracket") || "3"];
+  if (val("cmp-out")) args.push("-o", val("cmp-deck").replace(/\/[^/]+$/, "") + "/" + val("cmp-out") + ".json");
+  if (val("cmp-price")) args.push("--max-card-price", val("cmp-price"));
+  $("cmp-spin").classList.add("show");
+  await runInto(args, "cmp-out-pre");
+  $("cmp-spin").classList.remove("show");
+  loadDecks();
+}
+
+/* corpus */
+function crawl() {
+  runInto(["corpus", "crawl", "-f", val("crawl-format"), "--max", val("crawl-max") || "1000"], "corpus-out");
+}
+
+loadDecks();
+</script>
+</body>
+</html>

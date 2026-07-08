@@ -20,6 +20,11 @@ This README is a guided introduction. For the complete reference — every
 command and option, maintenance procedures, and failure recovery — see the
 [operating manual](docs/operating-manual.md).
 
+**Prefer a browser?** `doubletap web` serves a local web UI at
+`http://127.0.0.1:8787` with every command available as a form — deck
+browser, import, card lookup, analysis, suggestions, and model training.
+It runs the exact same code as the CLI and never leaves your machine.
+
 **Supported formats:** Commander (exactly 100 cards, one of each, including
 partner-commander and companion decks) and Modern (60-card minimum, up to 4
 copies of a card, companions supported). Other formats aren't supported yet;
@@ -196,11 +201,12 @@ To see which bracket your deck falls into:
 doubletap deck bracket ~/.doubletap/decks/my-deck.json
 ```
 
-The bracket is determined by how many "Game Changers" are in your deck — a list
-of about 40 cards (powerful tutors, fast mana, win-condition engines) that
-WotC identified as having an outsized effect on games. Zero Game Changers puts
-you at Bracket 1 or 2; 1–3 puts you at Bracket 3; 4 or more puts you at
-Bracket 4.
+The bracket is determined by how many "Game Changers" are in your deck — a
+WotC-curated list of cards (powerful tutors, fast mana, win-condition
+engines) identified as having an outsized effect on games; this tool ships
+with the core of that list in `formats.py` and it's easy to extend when WotC
+revises it. Zero Game Changers puts you at Bracket 1 or 2; 1–3 puts you at
+Bracket 3; 4 or more puts you at Bracket 4.
 
 The tool lists exactly which Game Changers are in your deck so you can decide
 whether to swap them out for a lower-bracket game.
@@ -471,6 +477,8 @@ src/doubletap/
 ├── formats.py      # format rules, validation, Commander Brackets
 ├── analysis.py     # card roles, mana curve, color balance, market prices
 ├── archidekt.py    # public decklist crawler
+├── web.py          # local web UI server (runs the CLI in-process)
+├── static/         # the web UI single-page app
 └── ml/             # suggestion engine (training and inference)
 
 docs/

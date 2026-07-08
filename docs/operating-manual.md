@@ -8,8 +8,9 @@ recovery. For a gentle introduction, read the [README](../README.md) first.
 
 ## 1. System overview
 
-DoubleTap is a local, single-user CLI. There is no server and no account;
-everything lives on your machine in two places:
+DoubleTap is a local, single-user tool — a CLI plus an optional local web UI
+(`doubletap web`, §3.0). There is no cloud service and no account; everything
+lives on your machine in two places:
 
 | Location | Contents |
 |---|---|
@@ -77,6 +78,18 @@ Every command exits `0` on success and `1` on failure (bad input, unresolved
 cards, validation violations, missing prerequisites). `--help` on any command
 shows its options.
 
+### 3.0 `web` — the browser UI
+
+**`web`** — serves the local web UI. Every action in the UI runs the real CLI
+in-process (same code path, guaranteed parity). Binds `127.0.0.1` only;
+requests require an `X-DoubleTap` header and only known subcommands are
+accepted, so other websites cannot drive it. Long commands (crawl, train)
+block until done — leave the tab open.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--port` | 8787 | Port to serve on; open `http://127.0.0.1:<port>` in a browser |
+
 ### 3.1 `cards` — the local card database
 
 **`cards sync`** — downloads Scryfall bulk data into the cache. Skips the
@@ -98,8 +111,8 @@ nothing matches.
 ### 3.2 `deck` — building and inspecting decks
 
 **`deck import PATH`** — routes by file extension: `.csv` (Moxfield/Archidekt
-exports), images (`.heic .jpg .png .webp .tiff .bmp` → OCR), anything else as
-a plain-text list.
+exports), images (`.heic .jpg .jpeg .png .webp .tiff .bmp` → OCR), anything
+else as a plain-text list.
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -156,7 +169,7 @@ leaves it, so the card count is preserved.
 | Parameter | Default | Description |
 |---|---|---|
 | `PATH` | required | The deck JSON file |
-| `NAME` | — | Card to make the commander. Omit to just show the current commander and its color identity |
+| `NAME` | — | Card to make the commander; must match exactly (typos get suggestions). Omit to just show the current commander and its color identity |
 | `--partner` | — | Second commander's name (both cards need the Partner ability) |
 
 **`deck merge PATH PATH...`** — combine two or more deck files into one.

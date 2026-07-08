@@ -19,6 +19,21 @@ train_app = typer.Typer(no_args_is_help=True, help="Train recommendation models"
 app.add_typer(train_app, name="train")
 
 
+@app.command("web")
+def web_cmd(
+    port: int = typer.Option(8787, "--port", help="Port to serve the web UI on"),
+):
+    """Serve the local web UI at http://127.0.0.1:<port> (Ctrl-C to stop)."""
+    from . import web
+
+    server = web.serve(port)
+    typer.echo(f"DoubleTap UI: http://127.0.0.1:{port}  (Ctrl-C to stop)")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        server.shutdown()
+
+
 @cards_app.command("sync")
 def cards_sync(
     force: bool = typer.Option(False, help="Re-download even if the cache is current"),
@@ -520,9 +535,6 @@ def _load_model(conn, fmt, model_path: Path | None):
     """Resolve and load the checkpoint plus its matching vocab. BC ships as
     default: CQL missed the agreed keep-bar (+2 recovery@50) on the reliable
     200-deck eval."""
-    from .ml.data import build_vocab
-    from .ml.model import load_checkpoint
-
     if model_path is None:
         models_dir = db.data_home() / "models"
         for candidate in (
@@ -535,6 +547,12 @@ def _load_model(conn, fmt, model_path: Path | None):
         if model_path is None:
             typer.echo("No trained model found; run doubletap train first.", err=True)
             raise typer.Exit(code=1)
+
+    # imported after the checkpoint check so a torch-less install still gets
+    # the friendly "no trained model" message instead of an import traceback
+    from .ml.data import build_vocab
+    from .ml.model import load_checkpoint
+
     vocab = build_vocab(conn, fmt)
     model, ckpt = load_checkpoint(model_path, vocab)
     return vocab, model, ckpt, model_path
@@ -633,14 +651,17 @@ def recommend(
     model."""
     import numpy as np
 
-    from .ml.eval import score_state
-    from .ml.neighbors import blend, neighbor_frequencies
-    from .ml.reward import PMIModel
-
     conn = db.connect()
     deck = decks.Deck.load(deck_path)
     fmt = formats.get_format(deck.format)
     vocab, model, ckpt, model_path = _load_model(conn, fmt, model_path)
+
+    # torch-backed imports after model resolution: a torch-less install gets
+    # _load_model's friendly "no trained model" message, not a traceback
+    from .ml.eval import score_state
+    from .ml.neighbors import blend, neighbor_frequencies
+    from .ml.reward import PMIModel
+
     pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
     pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
     partial, commander_idx, partner_idx = _deck_to_idxs(conn, deck, vocab, fmt)
@@ -702,12 +723,13 @@ def complete(
     Stays within the target Commander Bracket (default 3) unless raised."""
     import numpy as np
 
-    from .ml.eval import complete_deck
-
     conn = db.connect()
     deck = decks.Deck.load(deck_path)
     fmt = formats.get_format(deck.format)
     vocab, model, ckpt, model_path = _load_model(conn, fmt, model_path)
+
+    from .ml.eval import complete_deck
+
     partial, commander_idx, partner_idx = _deck_to_idxs(conn, deck, vocab, fmt)
 
     extra_mask = (
