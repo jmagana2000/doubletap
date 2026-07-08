@@ -179,3 +179,43 @@ def test_rejects_malformed_body(client):
     assert r.status_code == 400
     r = client.post("/api/run", content=b"not json", headers=HEADERS)
     assert r.status_code == 400
+
+
+# --- builder endpoints --------------------------------------------------------
+
+
+def test_cards_search_endpoint(client):
+    cards = client.get("/api/cards", params={"q": "bolt"}).json()
+    assert any(c["name"] == "Lightning Bolt" for c in cards)
+    bolt = next(c for c in cards if c["name"] == "Lightning Bolt")
+    assert bolt["mana_cost"] == "{R}" and bolt["type_line"] == "Instant"
+    assert "3 damage" in bolt["oracle_text"]
+
+    # identity filter: mono-white browse must exclude the red Bolt
+    white = client.get("/api/cards", params={"colors": "W"}).json()
+    assert all("R" not in c["colors"] for c in white)
+
+    # type + mana-value filters combine
+    cheap_creatures = client.get(
+        "/api/cards", params={"type": "Creature", "max_mv": "3"}
+    ).json()
+    assert cheap_creatures and all(
+        "Creature" in c["type_line"] and c["cmc"] <= 3 for c in cheap_creatures
+    )
+
+
+def test_deck_detail_endpoint(client):
+    import_deck(
+        client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n30 Swamp\n"
+    )
+    path = client.get("/api/decks").json()[0]["path"]
+    detail = client.get("/api/deck", params={"path": path}).json()
+    assert detail["commander"]["name"] == "Atraxa, Praetors' Voice"
+    assert detail["size"] == 32
+    by_name = {c["name"]: c for c in detail["cards"]}
+    assert by_name["Swamp"]["qty"] == 30
+    assert by_name["Sol Ring"]["mana_cost"] == "{1}"
+    assert any("exactly 100" in v for v in detail["violations"])
+
+    r = client.get("/api/deck", params={"path": "/nope/missing.json"})
+    assert r.status_code == 404

@@ -76,6 +76,100 @@ def list_decks() -> list[dict]:
     return out
 
 
+def _card_view(card: dict) -> dict:
+    """The card fields the builder UI renders, from the raw Scryfall JSON."""
+    from .analysis import card_price
+
+    images = card.get("image_uris") or (
+        (card.get("card_faces") or [{}])[0].get("image_uris") or {}
+    )
+    cost = card.get("mana_cost")
+    if not cost and card.get("card_faces"):
+        cost = card["card_faces"][0].get("mana_cost", "")
+    text = card.get("oracle_text")
+    if text is None:
+        text = "\n—\n".join(
+            f.get("oracle_text", "") for f in card.get("card_faces", [])
+        )
+    return {
+        "oracle_id": card["oracle_id"],
+        "name": card["name"],
+        "mana_cost": cost or "",
+        "cmc": card.get("cmc", 0),
+        "type_line": card.get("type_line", ""),
+        "oracle_text": text,
+        "colors": card.get("color_identity") or [],
+        "art": images.get("art_crop", ""),
+        "image": images.get("normal", ""),
+        "price": card_price(card),
+    }
+
+
+def search_cards(
+    q: str = "",
+    colors: str = "",
+    type_: str = "",
+    max_mv: str = "",
+    fmt: str = "commander",
+    limit: int = 60,
+) -> list[dict]:
+    """Filterable card browse for the builder grid, popularity-ordered.
+    Filters run in SQL over the JSON blobs; only matching rows are parsed."""
+    from . import db
+    from .names import normalize
+
+    conn = db.connect()
+    sql = (
+        "SELECT json FROM cards WHERE"
+        " json_extract(json, '$.legalities.' || ?) = 'legal'"
+    )
+    params: list = [fmt]
+    if q:
+        sql += " AND name_norm LIKE ?"
+        params.append(f"%{normalize(q)}%")
+    if type_:
+        sql += " AND json_extract(json, '$.type_line') LIKE ?"
+        params.append(f"%{type_}%")
+    if max_mv:
+        sql += " AND json_extract(json, '$.cmc') <= ?"
+        params.append(float(max_mv))
+    if colors:  # cards castable within this identity: no off-color symbols
+        for c in set("WUBRG") - set(colors.upper()):
+            # cards.json must be table-qualified or SQLite won't correlate it
+            sql += (
+                " AND NOT EXISTS (SELECT 1 FROM"
+                " json_each(cards.json, '$.color_identity') je WHERE je.value = ?)"
+            )
+            params.append(c)
+    sql += " ORDER BY COALESCE(json_extract(json, '$.edhrec_rank'), 99999) LIMIT ?"
+    params.append(limit)
+    return [_card_view(json.loads(raw)) for (raw,) in conn.execute(sql, params)]
+
+
+def deck_detail(path: str) -> dict:
+    """One deck, structured for the builder: slots, per-card data, violations."""
+    from . import db, decks, formats
+
+    conn = db.connect()
+    deck = decks.Deck.load(Path(path))
+
+    def view(oid, qty=1):
+        card = formats.get_card(conn, oid)
+        return {**_card_view(card), "qty": qty}
+
+    return {
+        "path": path,
+        "name": Path(path).stem,
+        "format": deck.format,
+        "size": deck.size(),
+        "commander": view(deck.commander) if deck.commander else None,
+        "partner": view(deck.partner) if deck.partner else None,
+        "companion": view(deck.companion) if deck.companion else None,
+        "cards": [view(oid, qty) for oid, qty in deck.entries.items()],
+        "violations": [v.message for v in formats.validate(conn, deck)],
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # quiet server
         pass
@@ -89,10 +183,30 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        if self.path in ("/", "/index.html"):
+        from urllib.parse import parse_qs, urlparse
+
+        url = urlparse(self.path)
+        qs = {k: v[0] for k, v in parse_qs(url.query).items()}
+        if url.path in ("/", "/index.html"):
             self._send(200, (STATIC / "index.html").read_bytes(), "text/html")
-        elif self.path == "/api/decks":
+        elif url.path == "/api/decks":
             self._send(200, list_decks())
+        elif url.path == "/api/cards":
+            self._send(
+                200,
+                search_cards(
+                    q=qs.get("q", ""),
+                    colors=qs.get("colors", ""),
+                    type_=qs.get("type", ""),
+                    max_mv=qs.get("max_mv", ""),
+                    fmt=qs.get("format", "commander"),
+                ),
+            )
+        elif url.path == "/api/deck":
+            try:
+                self._send(200, deck_detail(qs["path"]))
+            except Exception as e:
+                self._send(404, {"error": str(e)})
         else:
             self._send(404, {"error": "not found"})
 

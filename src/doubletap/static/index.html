@@ -3,111 +3,305 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DoubleTap</title>
+<title>DoubleTap — Planeswalker Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#2a2f3a;
-  --text:#e6e9ef; --dim:#9aa3b2; --accent:#7c5cff; --accent2:#4db6ac;
-  --ok:#4caf7d; --err:#e05d5d; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg:#0b0d12; --bg2:#12151d; --panel:rgba(23,26,35,.82); --panel-solid:#171a23;
+  --border:#2a2f3c; --gold:#c9a86a; --gold-dim:#8a7448;
+  --text:#e8e6df; --dim:#98a0af; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --W:#f5edd8; --U:#4f9fd8; --B:#9b6dc8; --R:#e05d47; --G:#4fa870; --C:#a8a29a;
+  --lift:0 14px 30px rgba(0,0,0,.55);
 }
 *{box-sizing:border-box;margin:0}
-body{background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;min-height:100vh}
-nav{width:220px;background:var(--panel);border-right:1px solid var(--border);padding:20px 0;position:sticky;top:0;height:100vh;flex-shrink:0}
-nav h1{font-size:19px;padding:0 20px 14px;letter-spacing:.5px}
-nav h1 span{color:var(--accent)}
-nav a{display:block;padding:9px 20px;color:var(--dim);text-decoration:none;font-size:14px;border-left:3px solid transparent;cursor:pointer}
+html{scrollbar-color:#333a48 transparent}
+body{
+  background:
+    radial-gradient(1100px 600px at 78% -10%, rgba(79,159,216,.10), transparent 60%),
+    radial-gradient(900px 700px at -10% 110%, rgba(155,109,200,.10), transparent 55%),
+    radial-gradient(700px 500px at 50% 115%, rgba(201,168,106,.06), transparent 60%),
+    var(--bg);
+  color:var(--text);font:14.5px/1.5 Inter,-apple-system,sans-serif;
+  display:flex;min-height:100vh}
+#motes{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.55}
+h1,h2,h3,.brand{font-family:Cinzel,Georgia,serif;letter-spacing:.04em}
+
+/* ---------- nav ---------- */
+nav{width:212px;flex-shrink:0;position:sticky;top:0;height:100vh;z-index:5;
+  background:linear-gradient(180deg,rgba(18,21,29,.95),rgba(11,13,18,.95));
+  border-right:1px solid var(--border);padding:22px 0;backdrop-filter:blur(10px)}
+.brand{font-size:20px;padding:0 22px 6px;color:var(--text)}
+.brand em{color:var(--gold);font-style:normal}
+.brand-sub{padding:0 22px 18px;font-size:11px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase}
+nav a{display:flex;align-items:center;gap:10px;padding:10px 22px;color:var(--dim);
+  text-decoration:none;font-size:13.5px;cursor:pointer;border-left:2px solid transparent;
+  transition:color .15s,background .15s}
 nav a:hover{color:var(--text)}
-nav a.active{color:var(--text);border-left-color:var(--accent);background:var(--panel2)}
-nav .group{padding:16px 20px 4px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
-main{flex:1;padding:28px 34px;max-width:1100px}
-section{display:none}
-section.active{display:block}
-h2{font-size:21px;margin-bottom:4px}
-.sub{color:var(--dim);font-size:13.5px;margin-bottom:18px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:18px}
-.card h3{font-size:15px;margin-bottom:10px;color:var(--accent2)}
+nav a.active{color:var(--gold);border-left-color:var(--gold);
+  background:linear-gradient(90deg,rgba(201,168,106,.10),transparent)}
+nav .group{padding:18px 22px 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.16em;color:#5c6472}
+nav a .rune{width:16px;text-align:center;opacity:.85}
+
+main{flex:1;position:relative;z-index:1;padding:24px 28px;min-width:0}
+section{display:none}section.active{display:block}
+.sub{color:var(--dim);font-size:13px;margin:2px 0 16px}
+
+/* ---------- shared chrome ---------- */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:18px;margin-bottom:16px;backdrop-filter:blur(8px);position:relative}
+.card::before{content:"";position:absolute;inset:0;border-radius:12px;pointer-events:none;
+  border:1px solid transparent;
+  background:linear-gradient(160deg,rgba(201,168,106,.28),transparent 30%,transparent 75%,rgba(201,168,106,.14)) border-box;
+  -webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude}
+.card h3{font-size:14px;margin-bottom:10px;color:var(--gold)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px}
-label{display:block;font-size:12px;color:var(--dim);margin-bottom:3px}
-input,select,textarea{background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:14px;min-width:70px}
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+label{display:block;font-size:11px;color:var(--dim);margin-bottom:4px;letter-spacing:.04em;text-transform:uppercase}
+input,select,textarea{background:rgba(10,12,17,.8);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);padding:8px 11px;font-size:14px;min-width:60px;
+  transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-dim);
+  box-shadow:0 0 0 3px rgba(201,168,106,.12)}
 textarea{width:100%;font-family:var(--mono);font-size:13px}
-button{background:var(--accent);border:0;border-radius:6px;color:#fff;padding:8px 16px;font-size:14px;cursor:pointer;font-weight:600}
-button:hover{filter:brightness(1.12)}
-button.secondary{background:var(--panel2);border:1px solid var(--border);color:var(--text);font-weight:400}
-button:disabled{opacity:.5;cursor:wait}
-pre.out{background:#0a0c10;border:1px solid var(--border);border-radius:8px;padding:14px;font:12.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word;margin-top:12px;max-height:480px;overflow:auto;display:none}
+button{background:linear-gradient(180deg,#d4b476,#b3945a);border:0;border-radius:8px;
+  color:#171104;padding:9px 16px;font-size:13.5px;cursor:pointer;font-weight:600;
+  transition:transform .12s,box-shadow .12s,filter .12s}
+button:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 6px 16px rgba(201,168,106,.25)}
+button.ghost{background:rgba(23,26,35,.9);border:1px solid var(--border);color:var(--text);font-weight:500}
+button.ghost:hover{border-color:var(--gold-dim);box-shadow:0 4px 12px rgba(0,0,0,.4)}
+button:disabled{opacity:.45;cursor:wait;transform:none}
+pre.out{background:rgba(6,8,11,.92);border:1px solid var(--border);border-radius:10px;
+  padding:13px;font:12.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word;
+  margin-top:12px;max-height:440px;overflow:auto;display:none}
 pre.out.show{display:block}
-pre.out.err{border-color:var(--err)}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th{text-align:left;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.5px;padding:6px 10px;border-bottom:1px solid var(--border)}
-td{padding:8px 10px;border-bottom:1px solid var(--border)}
-tr.deck{cursor:pointer}
-tr.deck:hover{background:var(--panel2)}
-.pill{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:99px;padding:1px 10px;font-size:12px;color:var(--dim)}
-.spin{display:inline-block;color:var(--dim);font-size:13px;margin-left:10px;visibility:hidden}
+pre.out.err{border-color:#7e3a3a}
+
+/* ---------- builder layout ---------- */
+#builder{display:none}
+#builder.active{display:grid;grid-template-columns:200px minmax(0,1fr) 330px;gap:18px;align-items:start}
+.rail{position:sticky;top:24px}
+
+/* summary bar */
+#summary{grid-column:1/-1;display:flex;gap:22px;align-items:center;flex-wrap:wrap;
+  background:linear-gradient(90deg,rgba(23,26,35,.92),rgba(18,21,29,.88));
+  border:1px solid var(--border);border-radius:14px;padding:12px 18px;backdrop-filter:blur(10px);
+  position:sticky;top:12px;z-index:4;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+#summary .deck-name{font-family:Cinzel,serif;font-size:17px;color:var(--text)}
+#summary select{font-family:Inter;min-width:170px}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat b{font-size:15px;font-weight:600}
+.stat span{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em}
+#sum-curve{display:flex;gap:2px;align-items:flex-end;height:30px}
+#sum-curve i{width:9px;background:linear-gradient(180deg,#5a86c9,#37517c);border-radius:2px 2px 0 0;min-height:2px;display:block}
+.badge{padding:3px 12px;border-radius:99px;font-size:12px;font-weight:600;letter-spacing:.02em}
+.badge.ok{background:rgba(79,168,112,.15);color:#7fd6a4;border:1px solid rgba(79,168,112,.4)}
+.badge.warn{background:rgba(224,93,71,.13);color:#f0937f;border:1px solid rgba(224,93,71,.4)}
+
+/* mana pips */
+.pip{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
+  border-radius:50%;font-size:10.5px;font-weight:700;color:#141414;margin-right:2px;vertical-align:-3px;
+  background:var(--C);box-shadow:inset 0 -2px 3px rgba(0,0,0,.25)}
+.pip.W{background:radial-gradient(circle at 35% 30%,#fffbe8,var(--W) 70%)}
+.pip.U{background:radial-gradient(circle at 35% 30%,#9fd0f0,var(--U) 70%);color:#08243a}
+.pip.B{background:radial-gradient(circle at 35% 30%,#c9a6e8,var(--B) 70%);color:#1d0a2e}
+.pip.R{background:radial-gradient(circle at 35% 30%,#f5a08e,var(--R) 70%);color:#3a0d05}
+.pip.G{background:radial-gradient(circle at 35% 30%,#8fd4ab,var(--G) 70%);color:#06301a}
+
+/* filter rail */
+.mana-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.mana-btn{width:38px;height:38px;border-radius:50%;border:1.5px solid var(--border);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;
+  background:rgba(10,12,17,.8);color:var(--dim);transition:all .18s;padding:0}
+.mana-btn:hover{transform:translateY(-2px)}
+.mana-btn.on{color:#141414}
+.mana-btn.on[data-c=W]{background:var(--W);border-color:#fff6d8;box-shadow:0 0 14px rgba(245,237,216,.55)}
+.mana-btn.on[data-c=U]{background:var(--U);border-color:#8fd0ff;box-shadow:0 0 14px rgba(79,159,216,.6);color:#06202f}
+.mana-btn.on[data-c=B]{background:var(--B);border-color:#c9a6e8;box-shadow:0 0 14px rgba(155,109,200,.6);color:#170526}
+.mana-btn.on[data-c=R]{background:var(--R);border-color:#ffb09e;box-shadow:0 0 14px rgba(224,93,71,.6);color:#330a03}
+.mana-btn.on[data-c=G]{background:var(--G);border-color:#8fe0b0;box-shadow:0 0 14px rgba(79,168,112,.6);color:#04270f}
+.type-chips{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.chip{padding:7px 12px;border-radius:8px;border:1px solid var(--border);cursor:pointer;
+  background:rgba(10,12,17,.7);color:var(--dim);font-size:12.5px;text-align:left;transition:all .15s;font-weight:500}
+.chip:hover{color:var(--text);transform:none;box-shadow:none;filter:none}
+.chip.on{color:var(--gold);border-color:var(--gold-dim);background:rgba(201,168,106,.08);box-shadow:0 0 10px rgba(201,168,106,.15)}
+#mv-out{color:var(--gold);font-weight:600}
+
+/* card grid */
+#search-wrap{position:relative;margin-bottom:14px}
+#search{width:100%;padding:12px 44px 12px 42px;font-size:15px;border-radius:12px;
+  background:rgba(15,18,25,.92);border:1px solid var(--border)}
+#search-wrap .lens{position:absolute;left:15px;top:12px;color:var(--dim)}
+#search-wrap kbd{position:absolute;right:12px;top:11px;font:11px var(--mono);color:var(--dim);
+  border:1px solid var(--border);border-radius:5px;padding:2px 7px;background:rgba(0,0,0,.3)}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:14px}
+.tile{position:relative;border-radius:11px;overflow:hidden;cursor:pointer;border:1px solid var(--border);
+  background:var(--bg2);aspect-ratio:4/3.1;transition:transform .18s cubic-bezier(.2,.8,.3,1.2),box-shadow .18s,border-color .18s}
+.tile:hover{transform:translateY(-5px) scale(1.02);box-shadow:var(--lift),0 0 18px rgba(201,168,106,.18);border-color:var(--gold-dim);z-index:2}
+.tile img{width:100%;height:68%;object-fit:cover;display:block;background:#1a1e28}
+.tile .meta{padding:7px 10px}
+.tile .nm{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .tl{font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.tile .cost{position:absolute;top:6px;right:6px;background:rgba(8,10,14,.82);border-radius:99px;padding:3px 6px;backdrop-filter:blur(4px)}
+.tile .price{position:absolute;top:6px;left:6px;background:rgba(8,10,14,.82);border-radius:6px;
+  padding:2px 7px;font-size:10.5px;color:var(--gold);font-weight:600;backdrop-filter:blur(4px)}
+.tile.skel{pointer-events:none}
+.tile.skel .shine{position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.05) 50%,transparent 70%);
+  animation:shine 1.3s infinite}
+@keyframes shine{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.empty{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--dim)}
+.empty .sigil{font-size:40px;margin-bottom:10px;opacity:.5}
+.empty h3{color:var(--text);font-size:16px;margin-bottom:6px}
+
+/* deck panel — the shelf */
+#shelf{background:linear-gradient(180deg,rgba(26,24,20,.92),rgba(17,16,14,.94));
+  border:1px solid #3a3324;border-radius:14px;padding:0;overflow:hidden;backdrop-filter:blur(8px)}
+#shelf .shelf-head{padding:14px 16px 10px;border-bottom:1px solid #3a3324;
+  background:linear-gradient(180deg,rgba(201,168,106,.10),transparent)}
+#shelf .shelf-head h3{font-size:15px;color:var(--gold);margin:0}
+#shelf .cmd-line{font-size:12px;color:var(--dim);margin-top:3px}
+#deck-groups{max-height:56vh;overflow-y:auto;padding:6px 0}
+.tgroup{padding:8px 16px 2px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#7d6f52;
+  border-bottom:1px solid rgba(201,168,106,.12);margin-bottom:2px}
+.drow{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 16px;font-size:13px;cursor:pointer;
+  transition:background .12s;border-left:2px solid transparent}
+.drow:hover{background:rgba(201,168,106,.06);border-left-color:var(--gold-dim)}
+.drow .q{color:var(--gold);font-weight:600;width:20px;font-family:var(--mono);font-size:12px}
+.drow .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drow .step{display:none;gap:2px}
+.drow:hover .step{display:flex}
+.drow .step button{padding:0 7px;font-size:13px;line-height:20px;border-radius:5px;background:rgba(201,168,106,.15);color:var(--gold);font-weight:700}
+.drow .step button:hover{transform:none;box-shadow:none;background:rgba(201,168,106,.3)}
+#shelf .actions{display:flex;gap:6px;flex-wrap:wrap;padding:12px 14px;border-top:1px solid #3a3324}
+#shelf .actions button{font-size:11.5px;padding:6px 10px}
+#shelf-out{margin:0 14px 14px}
+
+/* modal */
+#overlay{position:fixed;inset:0;background:rgba(5,6,9,.7);backdrop-filter:blur(6px);z-index:50;
+  display:none;align-items:center;justify-content:center;padding:24px}
+#overlay.show{display:flex;animation:fadein .18s}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+#modal{background:linear-gradient(165deg,#1b1e28,#12141c);border:1px solid var(--gold-dim);
+  border-radius:16px;max-width:780px;width:100%;max-height:90vh;overflow:auto;
+  display:flex;gap:0;box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 40px rgba(201,168,106,.08);
+  animation:pop .22s cubic-bezier(.2,.9,.3,1.15)}
+@keyframes pop{from{transform:scale(.94) translateY(10px);opacity:0}to{transform:none;opacity:1}}
+#modal .art{width:315px;flex-shrink:0;padding:18px 0 18px 18px}
+#modal .art img{width:100%;border-radius:12px;display:block;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#modal .body{padding:20px;flex:1;min-width:0}
+#modal h2{font-size:19px;margin-bottom:2px}
+#modal .tl{color:var(--dim);font-size:13px;margin-bottom:12px}
+#modal .otext{font-size:13.5px;line-height:1.65;white-space:pre-wrap;border-left:2px solid var(--gold-dim);
+  padding-left:12px;margin:12px 0;color:#d5d2c8}
+#modal .mrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+#modal .close{position:absolute;top:10px;right:14px;background:none;border:0;color:var(--dim);
+  font-size:22px;cursor:pointer;padding:4px 8px}
+#modal .close:hover{color:var(--text);transform:none;box-shadow:none}
+#modal-price{color:var(--gold);font-weight:600;font-size:13px}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:6px 10px;border-bottom:1px solid var(--border)}
+td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
+.hint{font-size:12px;color:var(--dim);margin-top:6px}
+.spin{display:inline-block;color:var(--dim);font-size:12.5px;margin-left:8px;visibility:hidden}
 .spin.show{visibility:visible}
-.hint{font-size:12.5px;color:var(--dim);margin-top:6px}
+
+@media (max-width:980px){
+  #builder.active{grid-template-columns:1fr}
+  .rail{position:static}
+  nav{width:64px}
+  nav .brand{font-size:14px;padding:0 8px 16px;text-align:center}
+  nav .brand-sub,nav a .lbl,nav .group{display:none}
+  nav a{justify-content:center;padding:12px 0}
+  #modal{flex-direction:column}#modal .art{width:100%;padding:18px 18px 0}
+}
 </style>
 </head>
 <body>
+<canvas id="motes"></canvas>
 <nav>
-  <h1>Double<span>Tap</span></h1>
-  <a data-nav="decks" class="active">Decks</a>
-  <a data-nav="import">Import</a>
-  <a data-nav="cards">Card Lookup</a>
-  <a data-nav="suggest">Suggestions</a>
+  <div class="brand">Double<em>Tap</em></div>
+  <div class="brand-sub">Command Center</div>
+  <a data-nav="builder" class="active"><span class="rune">⬢</span><span class="lbl">Deck Builder</span></a>
+  <a data-nav="import"><span class="rune">✦</span><span class="lbl">Import</span></a>
+  <a data-nav="cards"><span class="rune">◈</span><span class="lbl">Card Lookup</span></a>
+  <a data-nav="suggest"><span class="rune">✴</span><span class="lbl">Suggestions</span></a>
   <div class="group">Advanced</div>
-  <a data-nav="data">Data &amp; Models</a>
+  <a data-nav="data"><span class="rune">⛬</span><span class="lbl">Data &amp; Models</span></a>
 </nav>
 <main>
 
-<!-- ===================== DECKS ===================== -->
-<section id="decks" class="active">
-  <h2>Your decks</h2>
-  <p class="sub">Everything saved in ~/.doubletap/decks/. Click a deck to work with it.</p>
-  <div class="card" data-cmd="deck list">
-    <table>
-      <thead><tr><th>Deck</th><th>Format</th><th>Cards</th><th>Commander</th></tr></thead>
-      <tbody id="deck-rows"><tr><td colspan="4" style="color:var(--dim)">Loading…</td></tr></tbody>
-    </table>
+<!-- ===================== DECK BUILDER ===================== -->
+<section id="builder" class="active">
+
+  <div id="summary" data-cmd="deck list">
+    <div>
+      <label style="margin-bottom:2px">Deck</label>
+      <select id="deck-pick" class="deck-select" onchange="pickDeck(this.value)"></select>
+    </div>
+    <div class="stat"><b id="sum-count">—</b><span>cards</span></div>
+    <div class="stat"><b id="sum-identity">—</b><span>identity</span></div>
+    <div class="stat"><div id="sum-curve"></div><span>curve</span></div>
+    <div class="stat"><span id="sum-commander" style="font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0">—</span><span>commander</span></div>
+    <span id="sum-legal" class="badge ok" style="margin-left:auto">—</span>
   </div>
 
-  <div class="card" id="deck-detail" style="display:none">
-    <h3 id="dd-title">deck</h3>
-    <div class="row">
-      <button data-cmd="deck show"      onclick="deckAction('show')">Show cards</button>
-      <button data-cmd="deck validate"  class="secondary" onclick="deckAction('validate')">Validate</button>
-      <button data-cmd="deck analyze"   class="secondary" onclick="deckAction('analyze')">Analyze</button>
-      <button data-cmd="deck bracket"   class="secondary" onclick="deckAction('bracket')">Bracket</button>
-      <button data-cmd="deck price"     class="secondary" onclick="deckAction('price')">Price</button>
-      <span class="spin" id="dd-spin">running…</span>
+  <!-- left rail: filters -->
+  <aside class="rail">
+    <div class="card">
+      <h3>Colors</h3>
+      <div class="mana-filters">
+        <button class="mana-btn" data-c="W" onclick="toggleColor(this)">W</button>
+        <button class="mana-btn" data-c="U" onclick="toggleColor(this)">U</button>
+        <button class="mana-btn" data-c="B" onclick="toggleColor(this)">B</button>
+        <button class="mana-btn" data-c="R" onclick="toggleColor(this)">R</button>
+        <button class="mana-btn" data-c="G" onclick="toggleColor(this)">G</button>
+      </div>
+      <h3>Type</h3>
+      <div class="type-chips" id="type-chips">
+        <button class="chip on" data-t="">All types</button>
+        <button class="chip" data-t="Creature">Creatures</button>
+        <button class="chip" data-t="Instant">Instants</button>
+        <button class="chip" data-t="Sorcery">Sorceries</button>
+        <button class="chip" data-t="Artifact">Artifacts</button>
+        <button class="chip" data-t="Enchantment">Enchantments</button>
+        <button class="chip" data-t="Planeswalker">Planeswalkers</button>
+        <button class="chip" data-t="Land">Lands</button>
+      </div>
+      <h3>Max mana value <span id="mv-out">any</span></h3>
+      <input id="mv" type="range" min="0" max="9" value="9" style="width:100%"
+             oninput="setMv(this.value)">
     </div>
-    <div class="row" data-cmd="deck add">
-      <div><label>Card name</label><input id="dd-card" placeholder="Sol Ring" size="28"></div>
-      <div><label>Qty</label><input id="dd-qty" type="number" value="1" min="1" style="width:70px"></div>
-      <button onclick="deckCard('add')">Add</button>
-      <button data-cmd="deck remove" class="secondary" onclick="deckCard('remove')">Remove</button>
+  </aside>
+
+  <!-- center: search + grid -->
+  <div>
+    <div id="search-wrap">
+      <span class="lens">◎</span>
+      <input id="search" placeholder="Summon cards by name…  " autocomplete="off">
+      <kbd>⌘K</kbd>
     </div>
-    <div class="row" data-cmd="deck commander">
-      <div><label>Commander</label><input id="dd-commander" placeholder="exact card name" size="28"></div>
-      <div><label>Partner (optional)</label><input id="dd-partner" size="24"></div>
-      <button class="secondary" onclick="setCommander()">Set commander</button>
-      <button class="secondary" onclick="deckAction('commander')">Show current</button>
-    </div>
-    <pre class="out" id="dd-out"></pre>
+    <div id="grid"></div>
   </div>
 
-  <div class="card" data-cmd="deck merge">
-    <h3>Merge decks</h3>
-    <p class="hint">Combine single-card photo imports (or any decks) into one. Select with ⌘/Ctrl-click.</p>
-    <div class="row">
-      <div><label>Decks to merge (2+)</label><select id="merge-decks" multiple size="6" style="min-width:280px"></select></div>
-      <div><label>Output name</label><input id="merge-out" placeholder="my-deck" size="18"></div>
-      <div><label>Format</label><select id="merge-format"><option value="">keep as-is</option><option>commander</option><option>modern</option></select></div>
-      <button onclick="mergeDecks()">Merge</button>
+  <!-- right rail: the shelf -->
+  <aside class="rail">
+    <div id="shelf">
+      <div class="shelf-head">
+        <h3 id="shelf-title">No deck selected</h3>
+        <div class="cmd-line" id="shelf-cmd" data-cmd="deck commander">—</div>
+      </div>
+      <div id="deck-groups"></div>
+      <div class="actions">
+        <button class="ghost" data-cmd="deck show"     onclick="shelfAction('show')">Show</button>
+        <button class="ghost" data-cmd="deck validate" onclick="shelfAction('validate')">Validate</button>
+        <button class="ghost" data-cmd="deck analyze"  onclick="shelfAction('analyze')">Analyze</button>
+        <button class="ghost" data-cmd="deck bracket"  onclick="shelfAction('bracket')">Bracket</button>
+        <button class="ghost" data-cmd="deck price"    onclick="shelfAction('price')">Price</button>
+      </div>
+      <pre class="out" id="shelf-out"></pre>
     </div>
-    <pre class="out" id="merge-out-pre"></pre>
-  </div>
+  </aside>
 </section>
 
 <!-- ===================== IMPORT ===================== -->
@@ -141,6 +335,18 @@ Deck
     </div>
     <pre class="out" id="impf-out"></pre>
   </div>
+
+  <div class="card" data-cmd="deck merge">
+    <h3>Combine imports into one deck</h3>
+    <p class="hint">Merge single-card photo imports (or any decks). Select with ⌘/Ctrl-click.</p>
+    <div class="row">
+      <div><label>Decks to merge (2+)</label><select id="merge-decks" multiple size="6" style="min-width:280px"></select></div>
+      <div><label>Output name</label><input id="merge-out" placeholder="my-deck" size="18"></div>
+      <div><label>Format</label><select id="merge-format"><option value="">keep as-is</option><option>commander</option><option>modern</option></select></div>
+      <button onclick="mergeDecks()">Merge</button>
+    </div>
+    <pre class="out" id="merge-out-pre"></pre>
+  </div>
 </section>
 
 <!-- ===================== CARDS ===================== -->
@@ -159,7 +365,7 @@ Deck
     <p class="hint">Downloads ~180 MB from Scryfall when their data changed. Force refreshes market prices.</p>
     <div class="row">
       <button onclick="runInto(['cards','sync'],'sync-out',this)">Sync</button>
-      <button class="secondary" onclick="runInto(['cards','sync','--force'],'sync-out',this)">Force refresh (prices)</button>
+      <button class="ghost" onclick="runInto(['cards','sync','--force'],'sync-out',this)">Force refresh (prices)</button>
     </div>
     <pre class="out" id="sync-out"></pre>
   </div>
@@ -205,11 +411,11 @@ Deck
   <div class="card" data-cmd="corpus stats">
     <h3>Corpus</h3>
     <div class="row">
-      <button class="secondary" onclick="runInto(['corpus','stats'],'corpus-out',this)">Stats</button>
+      <button class="ghost" onclick="runInto(['corpus','stats'],'corpus-out',this)">Stats</button>
       <div><label>Format</label><select id="crawl-format"><option>commander</option><option>modern</option></select></div>
       <div><label>Max decks</label><input id="crawl-max" type="number" value="1000" style="width:100px"></div>
       <button data-cmd="corpus crawl" onclick="crawl()">Crawl</button>
-      <button data-cmd="corpus pmi" class="secondary" onclick="runInto(['corpus','pmi','-f',val('crawl-format')],'corpus-out',this)">Build synergy (PMI)</button>
+      <button data-cmd="corpus pmi" class="ghost" onclick="runInto(['corpus','pmi','-f',val('crawl-format')],'corpus-out',this)">Build synergy (PMI)</button>
     </div>
     <pre class="out" id="corpus-out"></pre>
   </div>
@@ -220,31 +426,77 @@ Deck
       <div><label>Format</label><select id="train-format"><option>commander</option><option>modern</option></select></div>
       <div><label>Steps</label><input id="train-steps" type="number" value="1500" style="width:100px"></div>
       <button onclick="runInto(['train','bc','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train BC</button>
-      <button data-cmd="train cql" class="secondary" onclick="runInto(['train','cql','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train CQL</button>
+      <button data-cmd="train cql" class="ghost" onclick="runInto(['train','cql','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train CQL</button>
     </div>
     <div class="row" data-cmd="eval">
       <div style="flex:1"><label>Checkpoint path (for eval)</label><input id="eval-model" placeholder="~/.doubletap/models/bc_commander.pt" style="width:100%"></div>
-      <button class="secondary" onclick="runInto(['eval','--model',val('eval-model')],'train-out',this)">Evaluate</button>
+      <button class="ghost" onclick="runInto(['eval','--model',val('eval-model')],'train-out',this)">Evaluate</button>
     </div>
     <pre class="out" id="train-out"></pre>
   </div>
 </section>
 
 </main>
+
+<!-- card detail modal -->
+<div id="overlay" onclick="if(event.target===this)closeModal()">
+  <div id="modal" style="position:relative">
+    <button class="close" onclick="closeModal()">×</button>
+    <div class="art"><img id="modal-img" alt=""></div>
+    <div class="body">
+      <h2 id="modal-name"></h2>
+      <div class="tl"><span id="modal-cost"></span> · <span id="modal-type"></span></div>
+      <div id="modal-price"></div>
+      <div class="otext" id="modal-text"></div>
+      <div class="mrow" id="modal-actions"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const val = id => $(id).value.trim();
+const esc = s => (s ?? "").toString().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 
-/* nav */
+/* ---------- ambient motes ---------- */
+(function(){
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cv = $("motes"), ctx = cv.getContext("2d");
+  let W, H, motes;
+  function reset(){
+    W = cv.width = innerWidth; H = cv.height = innerHeight;
+    motes = Array.from({length: 34}, () => ({
+      x: Math.random()*W, y: Math.random()*H, r: Math.random()*1.8+.4,
+      vy: -(Math.random()*.25+.06), vx: (Math.random()-.5)*.12,
+      hue: [ [201,168,106], [79,159,216], [155,109,200] ][Math.random()*3|0],
+      a: Math.random()*.5+.15
+    }));
+  }
+  addEventListener("resize", reset); reset();
+  (function tick(){
+    ctx.clearRect(0,0,W,H);
+    for (const m of motes){
+      m.x += m.vx; m.y += m.vy;
+      if (m.y < -4){ m.y = H+4; m.x = Math.random()*W; }
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 7);
+      ctx.fillStyle = `rgba(${m.hue[0]},${m.hue[1]},${m.hue[2]},${m.a})`;
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 6;
+      ctx.fill(); ctx.shadowBlur = 0;
+    }
+    requestAnimationFrame(tick);
+  })();
+})();
+
+/* ---------- nav ---------- */
 document.querySelectorAll("nav a[data-nav]").forEach(a => a.onclick = () => {
   document.querySelectorAll("nav a").forEach(x => x.classList.remove("active"));
   document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
   a.classList.add("active");
   $(a.dataset.nav).classList.add("active");
-  if (a.dataset.nav === "decks" || a.dataset.nav === "suggest") loadDecks();
+  if (["builder","suggest","import"].includes(a.dataset.nav)) loadDecks();
 });
 
-/* api */
+/* ---------- api ---------- */
 async function run(args) {
   const r = await fetch("/api/run", {
     method: "POST",
@@ -256,7 +508,7 @@ async function run(args) {
 async function runInto(args, outId, btn) {
   const out = $(outId);
   if (btn) btn.disabled = true;
-  out.className = "out show"; out.textContent = "running…";
+  out.className = "out show"; out.textContent = "casting…";
   try {
     const res = await run(args);
     out.textContent = res.output || "(no output)";
@@ -265,62 +517,195 @@ async function runInto(args, outId, btn) {
   if (btn) btn.disabled = false;
 }
 
-/* decks */
-let currentDeck = null;
-async function loadDecks() {
-  const decks = await (await fetch("/api/decks")).json();
-  $("deck-rows").innerHTML = decks.length
-    ? decks.map(d => `<tr class="deck" onclick='selectDeck(${JSON.stringify(d)})'>
-        <td>${d.name}</td><td><span class="pill">${d.format}</span></td>
-        <td>${d.cards}</td><td>${d.commander || "<span style='color:var(--dim)'>—</span>"}</td></tr>`).join("")
-    : `<tr><td colspan="4" style="color:var(--dim)">No decks yet — use the Import tab.</td></tr>`;
-  document.querySelectorAll(".deck-select").forEach(sel => {
-    sel.innerHTML = decks.map(d => `<option value="${d.path}">${d.name}</option>`).join("");
+/* ---------- mana pips ---------- */
+function manaPips(cost){
+  return (cost || "").replace(/\{([^}]+)\}/g, (_, s) => {
+    const c = "WUBRG".includes(s[0]) ? s[0] : (s.includes("/") && "WUBRG".includes(s[2]) ? s[2] : "");
+    return `<span class="pip ${c}">${esc(s.length > 2 ? s[0] : s)}</span>`;
   });
-  const ms = $("merge-decks");
-  ms.innerHTML = decks.map(d => `<option value="${d.path}">${d.name}</option>`).join("");
-}
-function selectDeck(d) {
-  currentDeck = d;
-  $("deck-detail").style.display = "block";
-  $("dd-title").textContent = `${d.name} — ${d.format}, ${d.cards} cards`;
-  deckAction("show");
-}
-async function deckAction(cmd) {
-  if (!currentDeck) return;
-  $("dd-spin").classList.add("show");
-  await runInto(["deck", cmd, currentDeck.path], "dd-out");
-  $("dd-spin").classList.remove("show");
-}
-async function deckCard(action) {
-  if (!currentDeck || !val("dd-card")) return;
-  await runInto(["deck", action, currentDeck.path, val("dd-card"), "-n", val("dd-qty") || "1"], "dd-out");
-  loadDecks();
-}
-async function setCommander() {
-  if (!currentDeck || !val("dd-commander")) return;
-  const args = ["deck", "commander", currentDeck.path, val("dd-commander")];
-  if (val("dd-partner")) args.push("--partner", val("dd-partner"));
-  await runInto(args, "dd-out");
-  loadDecks();
-}
-async function mergeDecks() {
-  const chosen = [...$("merge-decks").selectedOptions].map(o => o.value);
-  if (chosen.length < 2) { alert("Select at least two decks (⌘/Ctrl-click)."); return; }
-  const args = ["deck", "merge", ...chosen];
-  if (val("merge-out")) args.push("-o", `${homeDecks()}/${val("merge-out")}.json`);
-  if (val("merge-format")) args.push("--format", val("merge-format"));
-  await runInto(args, "merge-out-pre");
-  loadDecks();
-}
-function homeDecks() {
-  // decks live next to the ones we listed; derive the folder from any entry
-  const opt = $("merge-decks").options[0];
-  return opt ? opt.value.replace(/\/[^/]+$/, "") : "";
 }
 
-/* import — the server writes the pasted text to a temp file (@TEXT@) and
-   substitutes @DECKS@ with the decks folder */
+/* ---------- builder state ---------- */
+const state = { deck: null, colors: new Set(), type: "", maxMv: "", q: "" };
+
+async function loadDecks() {
+  const decks = await (await fetch("/api/decks")).json();
+  const pick = $("deck-pick");
+  const cur = state.deck?.path;
+  pick.innerHTML = decks.length
+    ? decks.map(d => `<option value="${esc(d.path)}" ${d.path===cur?"selected":""}>${esc(d.name)} · ${d.cards} cards</option>`).join("")
+    : `<option value="">no decks yet — import one</option>`;
+  document.querySelectorAll(".deck-select:not(#deck-pick)").forEach(sel => {
+    sel.innerHTML = decks.map(d => `<option value="${esc(d.path)}">${esc(d.name)}</option>`).join("");
+  });
+  $("merge-decks").innerHTML = decks.map(d => `<option value="${esc(d.path)}">${esc(d.name)}</option>`).join("");
+  if (!state.deck && decks.length) pickDeck(decks[0].path);
+  else if (state.deck) pickDeck(state.deck.path);
+}
+
+async function pickDeck(path) {
+  if (!path) { renderShelf(null); return; }
+  try {
+    const r = await fetch("/api/deck?path=" + encodeURIComponent(path));
+    if (!r.ok) throw 0;
+    state.deck = await r.json();
+  } catch { state.deck = null; }
+  renderShelf(state.deck);
+}
+
+function renderShelf(d) {
+  if (!d) {
+    $("shelf-title").textContent = "No deck selected";
+    $("shelf-cmd").textContent = "—";
+    $("deck-groups").innerHTML = `<div class="empty" style="padding:34px 16px"><div class="sigil">⬢</div>
+      <h3>The shelf stands empty</h3>Import a deck to begin building.</div>`;
+    ["sum-count","sum-identity","sum-commander"].forEach(i => $(i).textContent = "—");
+    $("sum-curve").innerHTML = ""; $("sum-legal").textContent = "—";
+    return;
+  }
+  $("shelf-title").textContent = d.name;
+  const cmd = d.commander ? d.commander.name + (d.partner ? " + " + d.partner.name : "") : "no commander — deck commander <deck> <name>";
+  $("shelf-cmd").textContent = (d.commander ? "⚔ " : "") + cmd;
+
+  // group by primary type
+  const order = ["Creature","Instant","Sorcery","Artifact","Enchantment","Planeswalker","Battle","Land"];
+  const groups = {};
+  for (const c of d.cards) {
+    const t = order.find(t => c.type_line.includes(t)) || "Other";
+    (groups[t] = groups[t] || []).push(c);
+  }
+  let html = "";
+  for (const t of [...order, "Other"]) {
+    if (!groups[t]) continue;
+    const n = groups[t].reduce((s,c) => s+c.qty, 0);
+    html += `<div class="tgroup">${t} · ${n}</div>`;
+    for (const c of groups[t].sort((a,b) => a.name.localeCompare(b.name))) {
+      html += `<div class="drow" onclick='openModal(${JSON.stringify(c).replace(/'/g,"&#39;")})'>
+        <span class="q">${c.qty}</span><span class="nm">${esc(c.name)}</span>
+        <span>${manaPips(c.mana_cost)}</span>
+        <span class="step">
+          <button data-cmd="deck add" onclick='event.stopPropagation();mutate("add",${JSON.stringify(c.name)})'>+</button>
+          <button data-cmd="deck remove" onclick='event.stopPropagation();mutate("remove",${JSON.stringify(c.name)})'>−</button>
+        </span></div>`;
+    }
+  }
+  $("deck-groups").innerHTML = html || `<div class="empty" style="padding:30px 16px"><div class="sigil">✦</div>
+      <h3>Empty deck</h3>Search the archive and summon your first card.</div>`;
+
+  // summary
+  $("sum-count").textContent = d.size + (d.format === "commander" ? " / 100" : "");
+  const idn = new Set();
+  [d.commander, d.partner].forEach(c => c && c.colors.forEach(x => idn.add(x)));
+  if (!d.commander) d.cards.forEach(c => c.colors.forEach(x => idn.add(x)));
+  $("sum-identity").innerHTML = "WUBRG".split("").filter(c => idn.has(c)).map(c => `<span class="pip ${c}">${c}</span>`).join("") || "◇";
+  $("sum-commander").textContent = d.commander ? d.commander.name : "none";
+  const buckets = Array(8).fill(0);
+  for (const c of d.cards) if (!c.type_line.includes("Land")) buckets[Math.min(Math.floor(c.cmc), 7)] += c.qty;
+  const mx = Math.max(...buckets, 1);
+  $("sum-curve").innerHTML = buckets.map(b => `<i style="height:${Math.max(2, b/mx*30)}px" title="${b}"></i>`).join("");
+  const v = d.violations.length;
+  $("sum-legal").textContent = v ? `${v} issue${v>1?"s":""}` : "✓ Legal";
+  $("sum-legal").className = "badge " + (v ? "warn" : "ok");
+  $("sum-legal").title = d.violations.join("\n");
+}
+
+async function mutate(action, name) {
+  if (!state.deck) return;
+  await run(["deck", action, state.deck.path, name]);
+  await pickDeck(state.deck.path);
+  loadDecks();
+}
+async function shelfAction(cmd) {
+  if (!state.deck) return;
+  await runInto(["deck", cmd, state.deck.path], "shelf-out");
+}
+
+/* ---------- card grid ---------- */
+let searchTimer = null, searchSeq = 0;
+function skeletons(n=12){
+  $("grid").innerHTML = Array.from({length:n}, () =>
+    `<div class="tile skel"><div style="height:68%;background:#1a1e28"></div>
+     <div class="meta"><div class="nm" style="background:#232836;height:11px;border-radius:4px;width:70%"></div>
+     <div class="tl" style="background:#1d222e;height:9px;border-radius:4px;width:45%;margin-top:5px"></div></div>
+     <div class="shine"></div></div>`).join("");
+}
+async function searchCards() {
+  const seq = ++searchSeq;
+  skeletons();
+  const p = new URLSearchParams();
+  if (state.q) p.set("q", state.q);
+  if (state.colors.size) p.set("colors", [...state.colors].join(""));
+  if (state.type) p.set("type", state.type);
+  if (state.maxMv !== "") p.set("max_mv", state.maxMv);
+  p.set("format", state.deck?.format || "commander");
+  const cards = await (await fetch("/api/cards?" + p)).json();
+  if (seq !== searchSeq) return; // a newer search superseded this one
+  if (!cards.length) {
+    $("grid").innerHTML = `<div class="empty"><div class="sigil">◈</div>
+      <h3>The archive is silent</h3>No cards match those wards — loosen a filter or try another name.</div>`;
+    return;
+  }
+  $("grid").innerHTML = cards.map(c => `
+    <div class="tile" onclick='openModal(${JSON.stringify(c).replace(/'/g,"&#39;")})'>
+      ${c.price != null ? `<span class="price">$${c.price.toFixed(2)}</span>` : ""}
+      <span class="cost">${manaPips(c.mana_cost)}</span>
+      <img loading="lazy" src="${esc(c.art || c.image)}" alt="">
+      <div class="meta"><div class="nm">${esc(c.name)}</div><div class="tl">${esc(c.type_line)}</div></div>
+    </div>`).join("");
+}
+function queueSearch(){ clearTimeout(searchTimer); searchTimer = setTimeout(searchCards, 220); }
+
+$("search").addEventListener("input", e => { state.q = e.target.value.trim(); queueSearch(); });
+addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); $("search").focus(); $("search").select(); }
+  else if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+    e.preventDefault(); $("search").focus();
+  } else if (e.key === "Escape") closeModal();
+});
+
+function toggleColor(btn) {
+  btn.classList.toggle("on");
+  const c = btn.dataset.c;
+  state.colors.has(c) ? state.colors.delete(c) : state.colors.add(c);
+  queueSearch();
+}
+document.querySelectorAll("#type-chips .chip").forEach(ch => ch.onclick = () => {
+  document.querySelectorAll("#type-chips .chip").forEach(x => x.classList.remove("on"));
+  ch.classList.add("on"); state.type = ch.dataset.t; queueSearch();
+});
+function setMv(v) {
+  state.maxMv = v === "9" ? "" : v;
+  $("mv-out").textContent = v === "9" ? "any" : "≤ " + v;
+  queueSearch();
+}
+
+/* ---------- modal ---------- */
+function openModal(c) {
+  $("modal-img").src = c.image || c.art || "";
+  $("modal-name").textContent = c.name;
+  $("modal-cost").innerHTML = manaPips(c.mana_cost) || "—";
+  $("modal-type").textContent = c.type_line;
+  $("modal-price").textContent = c.price != null ? `$${c.price.toFixed(2)} market` : "";
+  $("modal-text").textContent = c.oracle_text || "(no rules text)";
+  const inDeck = state.deck && state.deck.cards.find(x => x.name === c.name);
+  $("modal-actions").innerHTML = state.deck ? `
+    <button onclick='mutateFromModal("add", ${JSON.stringify(c.name)})'>Add to ${esc(state.deck.name)}</button>
+    ${inDeck ? `<button class="ghost" onclick='mutateFromModal("remove", ${JSON.stringify(c.name)})'>Remove (${inDeck.qty} in deck)</button>` : ""}
+    ${c.type_line.includes("Legendary") && c.type_line.includes("Creature")
+      ? `<button class="ghost" onclick='setCommanderFromModal(${JSON.stringify(c.name)})'>⚔ Make commander</button>` : ""}
+  ` : `<span class="hint">Select a deck in the builder to add this card.</span>`;
+  $("overlay").classList.add("show");
+}
+function closeModal(){ $("overlay").classList.remove("show"); }
+async function mutateFromModal(action, name){ closeModal(); await mutate(action, name); }
+async function setCommanderFromModal(name){
+  closeModal();
+  if (!state.deck) return;
+  await runInto(["deck", "commander", state.deck.path, name], "shelf-out");
+  await pickDeck(state.deck.path);
+}
+
+/* ---------- import ---------- */
 async function importText() {
   const text = $("imp-text").value;
   if (!text.trim()) return;
@@ -344,11 +729,18 @@ async function importFile() {
   await runInto(["deck", "import", val("impf-path"), "-f", val("impf-format"), "--no-interactive"], "impf-out");
   loadDecks();
 }
+async function mergeDecks() {
+  const chosen = [...$("merge-decks").selectedOptions].map(o => o.value);
+  if (chosen.length < 2) { alert("Select at least two decks (⌘/Ctrl-click)."); return; }
+  const args = ["deck", "merge", ...chosen];
+  if (val("merge-out")) args.push("-o", chosen[0].replace(/\/[^/]+$/, "") + "/" + val("merge-out") + ".json");
+  if (val("merge-format")) args.push("--format", val("merge-format"));
+  await runInto(args, "merge-out-pre");
+  loadDecks();
+}
 
-/* cards */
+/* ---------- other tabs ---------- */
 function lookup() { if (val("lookup-q")) runInto(["cards", "lookup", val("lookup-q")], "lookup-out"); }
-
-/* suggestions */
 async function recommend() {
   const args = ["recommend", "--deck", val("rec-deck"), "-k", val("rec-k") || "20",
                 "--personalize", val("rec-pers") || "0.3"];
@@ -366,13 +758,12 @@ async function completeDeck() {
   $("cmp-spin").classList.remove("show");
   loadDecks();
 }
-
-/* corpus */
 function crawl() {
   runInto(["corpus", "crawl", "-f", val("crawl-format"), "--max", val("crawl-max") || "1000"], "corpus-out");
 }
 
 loadDecks();
+searchCards();
 </script>
 </body>
 </html>
