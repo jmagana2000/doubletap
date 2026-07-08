@@ -64,6 +64,10 @@ source .venv/bin/activate                # so `doubletap` works directly
 doubletap cards sync                     # ~180 MB download from Scryfall
 ```
 
+Using uv: `uv sync --extra dev --extra ocr --extra ml` replaces the pip
+commands; `uv run pytest` runs the tests. `uv.lock` is committed for
+reproducible installs.
+
 > **Intel Macs:** the last x86_64 torch wheel is 2.2.2 (Python 3.11 only,
 > numpy < 2). Create the venv with `python3.11` and run
 > `pip install "torch==2.2.2" "numpy<2"` instead of the `ml` extra.

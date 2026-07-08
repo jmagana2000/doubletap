@@ -44,6 +44,9 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[ml]"
 ```
 
+Using [uv](https://docs.astral.sh/uv/) instead? `uv sync --extra dev --extra
+ocr --extra ml` replaces both pip commands (the repo commits `uv.lock`).
+
 Then activate the environment so you can type `doubletap` directly:
 
 ```bash
