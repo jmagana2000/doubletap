@@ -24,13 +24,23 @@ data), and what's out of scope until the app itself grows the feature.
   `/api/run` so CLI parity holds
 - Mobile: rails collapse, nav shrinks to runes, modal stacks
 
+## Delivered (remaining-screens pass)
+
+- **Home**: cinematic hero with the most recent deck's commander art,
+  featured-deck line, stat tiles (decks / cards / commanders / formats),
+  recent-decks strip — all live from `/api/decks`
+- **Deck Gallery**: art-backed deck cards (commander `art_crop`, identity
+  pips, format, count); click-through opens the deck in the Builder
+- **Analytics**: per-deck curve chart, cost-vs-lands color balance bars
+  (short colors flagged red), type breakdown with land/spell ratio,
+  roles-vs-targets bars, ways-to-win + violations panel, bracket badge and
+  market price — backed by the new `GET /api/analysis` endpoint
+- `/api/decks` now carries commander art, identity colors, and mtime
+
 ## Deferred — buildable now on existing data, not yet designed
 
 | Item | Backing data that already exists |
 |---|---|
-| Landing/dashboard hero (deck stats, recent decks, featured deck) | `/api/decks`, `/api/deck` |
-| Deck gallery cards with commander art | commander `art_crop` already in `/api/deck` |
-| Dedicated analytics screen (curve chart, color distribution, type breakdown, land/spell ratio, warnings) | `analysis.deck_report` — needs a JSON endpoint + charts |
 | Full command palette (actions, not just search focus) | `/api/run` |
 | Recommendations rendered as card tiles instead of text | `recommend` output + `/api/cards` |
 

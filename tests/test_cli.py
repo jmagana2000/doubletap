@@ -349,6 +349,8 @@ def test_ml_pipeline_end_to_end(loaded_conn, tmp_path):
 
     bc_ckpt = db.data_home() / "models" / "bc_commander.pt"
     assert bc_ckpt.exists()
+    # training writes torch-free numpy weights alongside the torch checkpoint
+    assert bc_ckpt.with_suffix(".npz").exists()
     result = runner.invoke(app, ["eval", "--model", str(bc_ckpt), "--n-hide", "2"])
     assert result.exit_code == 0, result.output
     assert "recovery" in result.output
@@ -357,6 +359,14 @@ def test_ml_pipeline_end_to_end(loaded_conn, tmp_path):
     result = runner.invoke(app, ["recommend", "--deck", str(deck), "-k", "3"])
     assert result.exit_code == 0, result.output
     assert "Top 3 additions" in result.output
+    # default resolution prefers the torch-free weights
+    assert "bc_commander.npz" in result.output
+
+    # explicit torch checkpoint still works on training machines
+    result = runner.invoke(
+        app, ["recommend", "--deck", str(deck), "-k", "3", "--model", str(bc_ckpt)]
+    )
+    assert result.exit_code == 0, result.output
 
     # budget cap: fixture cards are unpriced, so everything stays eligible
     result = runner.invoke(

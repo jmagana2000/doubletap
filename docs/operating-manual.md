@@ -56,21 +56,36 @@ The companion never counts toward deck size. Cards are identified by Scryfall
 Requirements: Python ≥ 3.11; macOS for photo import (everything else is
 cross-platform); ~200 MB disk for the card database.
 
+Recommended (uv reads `.python-version` and `uv.lock`, so the environment is
+always right — `dev` = tests, `ocr` = photo import, `ml` = training):
+
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev,ocr]"    # core + tests + photo import
-.venv/bin/pip install -e ".[ml]"         # torch, for training/recommending
-source .venv/bin/activate                # so `doubletap` works directly
-doubletap cards sync                     # ~180 MB download from Scryfall
+uv sync --extra dev --extra ocr --extra ml
+source .venv/bin/activate
+doubletap cards sync
 ```
 
-Using uv: `uv sync --extra dev --extra ocr --extra ml` replaces the pip
-commands; `uv run pytest` runs the tests. `uv.lock` is committed for
-reproducible installs.
+The last command downloads ~180 MB of card data from Scryfall.
 
-> **Intel Macs:** the last x86_64 torch wheel is 2.2.2 (Python 3.11 only,
-> numpy < 2). Create the venv with `python3.11` and run
-> `pip install "torch==2.2.2" "numpy<2"` instead of the `ml` extra.
+Plain pip alternative — use **python3.11 specifically** (a newer system
+`python3` will build a venv PyTorch can't install into on Intel Macs), and
+don't paste the block with comments into zsh:
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/pip install -e ".[dev,ocr]"
+.venv/bin/pip install -e ".[ml]"
+source .venv/bin/activate
+doubletap cards sync
+```
+
+> **Why the 3.11 pin, and when you can ignore it:** PyTorch is needed only
+> for **training**. Suggestions (`recommend`/`complete`) run on torch-free
+> numpy weights (`.npz`), so any Python ≥ 3.11 works for everyday use. The
+> pin exists because on Intel Macs the last x86_64 torch wheel is 2.2.2
+> (Python 3.11 only, numpy < 2) — encoded as dependency markers in
+> `pyproject.toml`, so `uv sync --extra ml` just works. Skip the `ml` extra
+> entirely if you never retrain.
 
 Verify the install: `doubletap cards lookup "sol ring"` should print a match.
 
@@ -249,9 +264,46 @@ For long crawls keep the machine awake: `caffeinate -is doubletap corpus crawl .
 
 ### 3.4 `train` / `eval` — models (advanced)
 
+**BC vs CQL — what the two trainers actually do.** Both train the same
+network (a two-tower scorer: one tower summarizes your partial deck, the
+other summarizes a candidate card; the match between them is the score).
+They differ in what the network is taught:
+
+- **BC (behavior cloning)** is supervised imitation. It is shown thousands
+  of human-built decks and learns to answer one question: *given this
+  partial deck, which card did a human actually add?* Its strength is that
+  it directly models what real, functioning decks look like. Its limits:
+  it can only imitate — it inherits the popularity bias of public decklists
+  and has no notion of whether a pick actually makes the deck better.
+- **CQL (conservative Q-learning)** is offline reinforcement learning.
+  Instead of imitating picks, it learns a *value* for each candidate: how
+  much long-term deck quality does adding this card buy? The reward signal
+  is built from card-synergy statistics (the PMI table — which is why
+  `corpus pmi` must run first) plus deck-structure terms. The "conservative"
+  part is a penalty that keeps value estimates anchored to cards actually
+  seen in human decks — without it, offline RL notoriously overrates cards
+  it has never seen tried.
+- **Why BC is the default.** The two are compared on the same held-out test
+  (`eval`: hide cards from unseen decks, measure recovery@k) under a
+  pre-committed decision rule: CQL ships as default only if it beats BC by
+  at least 2 points of recovery@50. On the full corpus it didn't clear that
+  bar, so `recommend` prefers `bc_<format>` and CQL remains available as an
+  experiment via `--model`. One honest caveat: CQL's reward is a statistic
+  of the same corpus BC imitates, so a large CQL edge was never likely —
+  the keep-bar exists to stop the fancier model from shipping on vibes.
+
+Training order: `corpus crawl` → `corpus pmi` → `train bc` → (optionally)
+`train cql`, which initializes from the BC checkpoint.
+
+**Checkpoints and torch.** Training requires PyTorch; **suggestions do
+not**. Every training run writes two files: `<algo>_<format>.pt` (torch,
+for further training) and `<algo>_<format>.npz` (plain numpy weights).
+`recommend`/`complete` prefer the `.npz` and run torch-free — the numpy
+scorer is bit-for-bit equivalent to the torch model (pinned by a test).
+
 **`train bc`** — trains the behavior-cloning baseline (the default model for
 suggestions). Refuses to run on fewer than 20 parsed decks. Writes
-`models/bc_<format>.pt`.
+`models/bc_<format>.pt` + `.npz`.
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -270,8 +322,13 @@ requires the PMI table first. Writes `models/cql_<format>.pt`.
 | `--seed` | 0 | Random seed |
 | `--init-from-bc/--no-init-from-bc` | on | Start from the BC checkpoint's weights when one exists |
 
+**`train export`** — converts existing `.pt` checkpoints in
+`~/.doubletap/models/` to torch-free `.npz` weights (needs torch; new
+training runs write both automatically). No parameters.
+
 **`eval`** — held-out recovery@k: hides cards from unseen decks and measures
-how many the model ranks highly. Higher is better.
+how many the model ranks highly. Higher is better. Use it to compare a BC
+and a CQL checkpoint on equal terms.
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -313,7 +370,7 @@ and the color-balance section of `deck analyze`.
 **Photograph a physical deck → analyzed, legal deck file**
 
 ```bash
-doubletap deck import IMG_001.HEIC          # once per card photo
+doubletap deck import IMG_001.HEIC
 doubletap deck merge ~/.doubletap/decks/*.json -o ~/.doubletap/decks/mydeck.json
 doubletap deck commander ~/.doubletap/decks/mydeck.json "Your Commander"
 doubletap deck analyze  ~/.doubletap/decks/mydeck.json
@@ -331,7 +388,7 @@ doubletap deck price finished.json
 **Tune a deck to a table's power level**
 
 ```bash
-doubletap deck bracket mydeck.json     # which bracket am I?
+doubletap deck bracket mydeck.json
 # swap out listed Game Changers to drop a bracket, re-run to confirm
 ```
 
@@ -339,9 +396,9 @@ doubletap deck bracket mydeck.json     # which bracket am I?
 
 ```bash
 caffeinate -is doubletap corpus crawl -f commander --max 20000
-doubletap corpus stats                       # watch parsed count grow
+doubletap corpus stats
 doubletap corpus pmi -f commander
-doubletap train bc -f commander              # 10–30 min
+doubletap train bc -f commander
 doubletap eval --model ~/.doubletap/models/bc_commander.pt
 ```
 
@@ -369,7 +426,7 @@ doubletap eval --model ~/.doubletap/models/bc_commander.pt
 | Symptom | Cause | Fix |
 |---|---|---|
 | `command not found: doubletap` | venv not active | `source .venv/bin/activate` or use `.venv/bin/doubletap` |
-| `No module named 'torch'` on recommend/complete | Launcher points at a Python without torch (multi-Python venv) | `.venv/bin/python -m pip install -e . --no-deps --force-reinstall` |
+| `No module named 'torch'` on recommend/complete | Only legacy `.pt` checkpoints present; torch-free `.npz` weights missing | Run `doubletap train export` once on a torch-enabled setup (`uv sync --extra ml`); afterwards suggestions never need torch |
 | `No trained model found` | No checkpoint for this format | Run the training workflow (§4), or check `~/.doubletap/models/` |
 | `only N parsed <format> decks; crawl more first` | Corpus below the 20-deck training minimum | `corpus crawl` more decks |
 | `Missing pmi_<format>.npz; run corpus pmi first` | CQL needs the synergy table | `doubletap corpus pmi -f <format>` |

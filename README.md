@@ -36,16 +36,22 @@ any deck you import is treated as one of these two.
 
 ### 1. Install
 
-You need Python 3.11 or newer. Run these commands once in the project folder:
+The recommended installer is [uv](https://docs.astral.sh/uv/) — it reads the
+repo's `.python-version` (3.11) and `uv.lock`, so one command builds the
+right environment every time:
 
 ```bash
-python3 -m venv .venv
+uv sync --extra dev --extra ocr --extra ml
+```
+
+Prefer plain pip? Use **python3.11 specifically** (your system `python3` may
+be newer, and PyTorch on Intel Macs requires 3.11):
+
+```bash
+python3.11 -m venv .venv
 .venv/bin/pip install -e ".[dev,ocr]"
 .venv/bin/pip install -e ".[ml]"
 ```
-
-Using [uv](https://docs.astral.sh/uv/) instead? `uv sync --extra dev --extra
-ocr --extra ml` replaces both pip commands (the repo commits `uv.lock`).
 
 Then activate the environment so you can type `doubletap` directly:
 
@@ -53,8 +59,10 @@ Then activate the environment so you can type `doubletap` directly:
 source .venv/bin/activate
 ```
 
-> **Intel Mac note:** Use `python3.11` when creating the venv and replace the
-> last line above with `pip install "torch==2.2.2" "numpy<2"`.
+> **Note:** PyTorch is only needed for *training* your own model.
+> Suggestions run on lightweight numpy weights, so you can skip the `ml`
+> extra entirely if you use a pre-trained model. On Intel Macs the `ml`
+> extra automatically pins the last compatible torch (2.2.2, Python 3.11).
 
 ### 2. Download the card database
 
@@ -464,8 +472,10 @@ the launcher from the interpreter that has torch:
 ## Development
 
 ```bash
-.venv/bin/pytest              # run all tests (no network required)
-.venv/bin/pytest -m macos_ocr # photo OCR smoke test (requires a real image)
+# run all tests (no network required):
+.venv/bin/pytest
+# photo OCR smoke test (requires a real image):
+.venv/bin/pytest -m macos_ocr
 ```
 
 Source layout:

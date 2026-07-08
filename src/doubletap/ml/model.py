@@ -80,6 +80,26 @@ class TwoTowerQ(nn.Module):
         """state: (out,) single state; pool: (n,) candidate indices -> (n,) scores."""
         return self.action_repr(pool) @ state
 
+    def score(
+        self,
+        partial_idxs: np.ndarray,
+        commander_idx: int | None,
+        state_feats: np.ndarray,
+        pool: np.ndarray,
+    ) -> np.ndarray:
+        """Numpy-in/numpy-out scorer — the interface ml.policy drives, shared
+        with the torch-free NpTwoTowerQ."""
+        self.eval()
+        with torch.no_grad():
+            bag = torch.from_numpy(partial_idxs)
+            offsets = torch.zeros(1, dtype=torch.int64)
+            commander = torch.tensor(
+                [commander_idx if commander_idx is not None else -1]
+            )
+            feats = torch.from_numpy(state_feats).unsqueeze(0)
+            state = self.state_repr(bag, offsets, commander, feats)[0]
+            return self.score_pool(state, torch.from_numpy(pool)).numpy()
+
 
 def save_checkpoint(
     path: Path,
@@ -98,6 +118,16 @@ def save_checkpoint(
             "metrics": metrics,
         },
         path,
+    )
+    # sibling .npz: raw weight arrays so recommend/complete run without torch
+    from .infer_np import save_np_checkpoint
+
+    save_np_checkpoint(
+        Path(path).with_suffix(".npz"),
+        model.state_dict(),
+        vocab.oracle_ids,
+        format_name,
+        algo,
     )
 
 

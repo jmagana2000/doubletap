@@ -55,6 +55,23 @@ def list_decks() -> list[dict]:
         ).fetchone()
         return row[0] if row else oid
 
+    def art_and_colors(deck):
+        """Commander art (or first card's art) plus identity for gallery cards."""
+        from . import formats
+
+        oid = deck.commander or next(iter(deck.entries), None)
+        if not oid:
+            return "", []
+        card = formats.get_card(conn, oid)
+        images = card.get("image_uris") or (
+            (card.get("card_faces") or [{}])[0].get("image_uris") or {}
+        )
+        colors = set(card.get("color_identity") or [])
+        if deck.partner:
+            partner = formats.get_card(conn, deck.partner)
+            colors |= set(partner.get("color_identity") or [])
+        return images.get("art_crop", ""), [c for c in "WUBRG" if c in colors]
+
     out = []
     for f in sorted(db.decks_dir().glob("*.json")):
         try:
@@ -64,6 +81,7 @@ def list_decks() -> list[dict]:
         commander = named(deck.commander) if deck.commander else None
         if deck.partner:
             commander += f" + {named(deck.partner)}"
+        art, colors = art_and_colors(deck)
         out.append(
             {
                 "name": f.stem,
@@ -71,6 +89,9 @@ def list_decks() -> list[dict]:
                 "format": deck.format,
                 "cards": deck.size(),
                 "commander": commander,
+                "art": art,
+                "colors": colors,
+                "mtime": f.stat().st_mtime,
             }
         )
     return out
@@ -170,6 +191,37 @@ def deck_detail(path: str) -> dict:
     }
 
 
+def deck_analysis(path: str) -> dict:
+    """Structured analytics for one deck: roles, curve, color balance,
+    bracket, price — the data behind the Analytics screen."""
+    from . import analysis, db, decks, formats
+
+    conn = db.connect()
+    deck = decks.Deck.load(Path(path))
+    entries = dict(deck.entries)
+    for oid in (deck.commander, deck.partner, deck.companion):
+        if oid:
+            entries[oid] = entries.get(oid, 0) + 1
+    report = analysis.deck_report(conn, entries)
+    names = [formats.get_card(conn, oid)["name"] for oid in entries]
+    bracket, game_changers = formats.compute_bracket(names)
+    return {
+        "roles": {r: sorted(cards) for r, cards in report.by_role.items()},
+        "targets": analysis.COMMANDER_TARGETS if deck.format == "commander" else {},
+        "curve": {str(mv): n for mv, n in sorted(report.curve.items())},
+        "avg_mv": round(report.avg_mv, 2),
+        "early_plays": report.early_plays,
+        "pips": dict(report.pips),
+        "sources": dict(report.sources),
+        "short_colors": analysis.short_colors(report),
+        "price": round(report.total_price, 2),
+        "unpriced": report.unpriced,
+        "bracket": bracket,
+        "game_changers": sorted(game_changers),
+        "violations": [v.message for v in formats.validate(conn, deck)],
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # quiet server
         pass
@@ -205,6 +257,11 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/deck":
             try:
                 self._send(200, deck_detail(qs["path"]))
+            except Exception as e:
+                self._send(404, {"error": str(e)})
+        elif url.path == "/api/analysis":
+            try:
+                self._send(200, deck_analysis(qs["path"]))
             except Exception as e:
                 self._send(404, {"error": str(e)})
         else:

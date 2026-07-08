@@ -34,6 +34,7 @@ ALL_COMMANDS = [
     ("corpus", "pmi"),
     ("train", "bc"),
     ("train", "cql"),
+    ("train", "export"),
     ("eval", None),
     ("recommend", None),
     ("complete", None),
@@ -219,3 +220,23 @@ def test_deck_detail_endpoint(client):
 
     r = client.get("/api/deck", params={"path": "/nope/missing.json"})
     assert r.status_code == 404
+
+
+def test_analysis_endpoint(client):
+    import_deck(
+        client,
+        "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n"
+        "4 Lightning Bolt\n30 Swamp\n",
+    )
+    path = client.get("/api/decks").json()[0]["path"]
+    a = client.get("/api/analysis", params={"path": path}).json()
+    assert a["roles"]["ramp"] == [["Sol Ring", 1]]
+    assert a["targets"]["lands"] == 36
+    assert a["curve"]["1"] == 5  # Sol Ring + 4 Bolts
+    assert a["pips"]["R"] == 4 and a["sources"] == {"B": 30}
+    assert "R" in a["short_colors"]  # no land makes red
+    assert a["bracket"] in (1, 2, 3, 4)
+    assert any("exactly 100" in v for v in a["violations"])
+
+    decks = client.get("/api/decks").json()
+    assert "art" in decks[0] and "colors" in decks[0]

@@ -206,6 +206,58 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
 .spin{display:inline-block;color:var(--dim);font-size:12.5px;margin-left:8px;visibility:hidden}
 .spin.show{visibility:visible}
 
+/* ---------- home ---------- */
+#hero{position:relative;border-radius:18px;overflow:hidden;border:1px solid var(--gold-dim);
+  min-height:270px;display:flex;align-items:flex-end;margin-bottom:20px;
+  box-shadow:0 20px 50px rgba(0,0,0,.45)}
+#hero .bg{position:absolute;inset:0;background-size:cover;background-position:center 25%;
+  filter:saturate(1.05);transform:scale(1.03)}
+#hero .veil{position:absolute;inset:0;background:
+  linear-gradient(180deg,rgba(11,13,18,.25) 0%,rgba(11,13,18,.92) 78%),
+  linear-gradient(90deg,rgba(11,13,18,.75),transparent 55%)}
+#hero .inner{position:relative;padding:26px 28px;width:100%}
+#hero h1{font-size:34px;letter-spacing:.05em}
+#hero h1 em{color:var(--gold);font-style:normal}
+#hero .tag{color:var(--dim);margin:4px 0 14px;font-size:13.5px}
+#hero .feat{font-size:12.5px;color:var(--gold);letter-spacing:.1em;text-transform:uppercase}
+.stat-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px}
+.stile{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;backdrop-filter:blur(8px)}
+.stile b{font-size:24px;font-family:Cinzel,serif;color:var(--gold);display:block}
+.stile span{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.12em}
+.recent{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+
+/* ---------- gallery ---------- */
+#gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.gdeck{position:relative;border-radius:14px;overflow:hidden;cursor:pointer;min-height:150px;
+  border:1px solid var(--border);display:flex;align-items:flex-end;
+  transition:transform .18s cubic-bezier(.2,.8,.3,1.2),box-shadow .18s,border-color .18s;background:var(--bg2)}
+.gdeck:hover{transform:translateY(-5px);box-shadow:var(--lift),0 0 20px rgba(201,168,106,.15);border-color:var(--gold-dim)}
+.gdeck .bg{position:absolute;inset:0;background-size:cover;background-position:center 22%}
+.gdeck .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,13,18,.06) 20%,rgba(11,13,18,.94) 85%)}
+.gdeck .inner{position:relative;padding:12px 14px;width:100%}
+.gdeck .nm{font-family:Cinzel,serif;font-size:15px}
+.gdeck .mrow{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11.5px;color:var(--dim)}
+
+/* ---------- analytics ---------- */
+#ana-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.bar-row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:12.5px}
+.bar-row .lb{width:96px;color:var(--dim);flex-shrink:0}
+.bar-row .tr{flex:1;height:12px;background:rgba(255,255,255,.05);border-radius:6px;overflow:hidden;position:relative}
+.bar-row .fl{height:100%;border-radius:6px;background:linear-gradient(90deg,#8a7448,var(--gold));transition:width .5s cubic-bezier(.2,.8,.3,1)}
+.bar-row .fl.blue{background:linear-gradient(90deg,#37517c,#5a86c9)}
+.bar-row .fl.short{background:linear-gradient(90deg,#7e3a3a,#e05d47)}
+.bar-row .n{width:52px;text-align:right;font-family:var(--mono);font-size:11.5px;color:var(--text)}
+#curve-chart{display:flex;gap:8px;align-items:flex-end;height:130px;padding:6px 2px 0}
+#curve-chart .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
+#curve-chart .bar{width:100%;border-radius:5px 5px 0 0;background:linear-gradient(180deg,#5a86c9,#2c4066);
+  box-shadow:0 0 12px rgba(79,159,216,.25);min-height:2px;transition:height .5s cubic-bezier(.2,.8,.3,1)}
+#curve-chart .lbl{font-size:10.5px;color:var(--dim);font-family:var(--mono)}
+#curve-chart .cnt{font-size:10.5px;color:var(--text);font-family:var(--mono)}
+.warnline{display:flex;gap:9px;padding:7px 0;font-size:13px;border-bottom:1px solid rgba(42,47,60,.5);align-items:baseline}
+.warnline:last-child{border-bottom:0}
+.warnline .sig{color:#f0937f}
+.warnline.okline .sig{color:#7fd6a4}
+
 @media (max-width:980px){
   #builder.active{grid-template-columns:1fr}
   .rail{position:static}
@@ -222,7 +274,10 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
 <nav>
   <div class="brand">Double<em>Tap</em></div>
   <div class="brand-sub">Command Center</div>
-  <a data-nav="builder" class="active"><span class="rune">⬢</span><span class="lbl">Deck Builder</span></a>
+  <a data-nav="home" class="active"><span class="rune">✧</span><span class="lbl">Home</span></a>
+  <a data-nav="builder"><span class="rune">⬢</span><span class="lbl">Deck Builder</span></a>
+  <a data-nav="gallery"><span class="rune">❖</span><span class="lbl">Deck Gallery</span></a>
+  <a data-nav="analytics"><span class="rune">◭</span><span class="lbl">Analytics</span></a>
   <a data-nav="import"><span class="rune">✦</span><span class="lbl">Import</span></a>
   <a data-nav="cards"><span class="rune">◈</span><span class="lbl">Card Lookup</span></a>
   <a data-nav="suggest"><span class="rune">✴</span><span class="lbl">Suggestions</span></a>
@@ -231,8 +286,47 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
 </nav>
 <main>
 
+<!-- ===================== HOME ===================== -->
+<section id="home" class="active">
+  <div id="hero">
+    <div class="bg" id="hero-bg"></div>
+    <div class="veil"></div>
+    <div class="inner">
+      <div class="feat" id="hero-feat"></div>
+      <h1>Double<em>Tap</em></h1>
+      <div class="tag">Your planeswalker command center — build, tune, and price decks from your own collection.</div>
+      <div class="row" style="margin-bottom:0">
+        <button onclick="nav('builder')">Open the builder</button>
+        <button class="ghost" onclick="nav('import')">Import a deck</button>
+      </div>
+    </div>
+  </div>
+  <div class="stat-tiles" id="home-stats"></div>
+  <h2 style="font-size:17px;margin-bottom:10px">Recent decks</h2>
+  <div class="recent" id="home-recent"></div>
+</section>
+
+<!-- ===================== GALLERY ===================== -->
+<section id="gallery">
+  <h2>Deck gallery</h2>
+  <p class="sub">Every deck in your library. Click one to open it in the builder.</p>
+  <div id="gallery-grid"></div>
+</section>
+
+<!-- ===================== ANALYTICS ===================== -->
+<section id="analytics">
+  <h2>Deck analytics</h2>
+  <p class="sub">How the deck functions and wins — curve, colors, roles, and what to fix.</p>
+  <div class="row" style="margin-bottom:16px">
+    <div><label>Deck</label><select id="ana-pick" class="deck-select" onchange="renderAnalytics(this.value)"></select></div>
+    <span class="badge ok" id="ana-bracket" style="align-self:center">—</span>
+    <span id="ana-price" style="align-self:center;color:var(--gold);font-weight:600"></span>
+  </div>
+  <div id="ana-grid"></div>
+</section>
+
 <!-- ===================== DECK BUILDER ===================== -->
-<section id="builder" class="active">
+<section id="builder">
 
   <div id="summary" data-cmd="deck list">
     <div>
@@ -427,6 +521,7 @@ Deck
       <div><label>Steps</label><input id="train-steps" type="number" value="1500" style="width:100px"></div>
       <button onclick="runInto(['train','bc','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train BC</button>
       <button data-cmd="train cql" class="ghost" onclick="runInto(['train','cql','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train CQL</button>
+      <button data-cmd="train export" class="ghost" onclick="runInto(['train','export'],'train-out',this)">Export weights (.npz)</button>
     </div>
     <div class="row" data-cmd="eval">
       <div style="flex:1"><label>Checkpoint path (for eval)</label><input id="eval-model" placeholder="~/.doubletap/models/bc_commander.pt" style="width:100%"></div>
@@ -488,13 +583,16 @@ const esc = s => (s ?? "").toString().replace(/&/g,"&amp;").replace(/</g,"&lt;")
 })();
 
 /* ---------- nav ---------- */
-document.querySelectorAll("nav a[data-nav]").forEach(a => a.onclick = () => {
-  document.querySelectorAll("nav a").forEach(x => x.classList.remove("active"));
-  document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
-  a.classList.add("active");
-  $(a.dataset.nav).classList.add("active");
-  if (["builder","suggest","import"].includes(a.dataset.nav)) loadDecks();
-});
+function nav(name) {
+  document.querySelectorAll("nav a").forEach(x => x.classList.toggle("active", x.dataset.nav === name));
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("active", s.id === name));
+  if (["builder","suggest","import"].includes(name)) loadDecks();
+  if (name === "home") renderHome();
+  if (name === "gallery") renderGallery();
+  if (name === "analytics") loadAnalytics();
+}
+document.querySelectorAll("nav a[data-nav]").forEach(a => a.onclick = () => nav(a.dataset.nav));
+function goBuilder(path) { nav("builder"); pickDeck(path); }
 
 /* ---------- api ---------- */
 async function run(args) {
@@ -762,6 +860,153 @@ function crawl() {
   runInto(["corpus", "crawl", "-f", val("crawl-format"), "--max", val("crawl-max") || "1000"], "corpus-out");
 }
 
+/* ---------- home ---------- */
+const STALE = `<div class="empty"><div class="sigil">⚠</div><h3>Server needs a restart</h3>
+  The running server is older than this page — stop it (Ctrl-C) and run <b>doubletap web</b> again.</div>`;
+
+function deckCardHtml(d) {
+  return `<div class="gdeck" onclick='goBuilder(${JSON.stringify(d.path)})'>
+    <div class="bg" style="background-image:url('${esc(d.art || "")}')"></div><div class="veil"></div>
+    <div class="inner">
+      <div class="nm">${esc(d.name)}</div>
+      <div class="mrow">
+        <span class="pill">${esc(d.format)}</span>
+        <span>${d.cards} cards</span>
+        <span>${(d.colors || []).map(c => `<span class="pip ${c}">${c}</span>`).join("")}</span>
+      </div>
+      <div class="mrow" style="color:var(--dim);font-size:11px">${esc(d.commander || "no commander")}</div>
+    </div></div>`;
+}
+async function renderHome() {
+  const decks = await (await fetch("/api/decks")).json();
+  const recent = [...decks].sort((a,b) => b.mtime - a.mtime);
+  const featured = recent.find(d => d.art) || recent[0];
+  if (featured) {
+    $("hero-bg").style.backgroundImage = `url('${featured.art}')`;
+    $("hero-feat").textContent = "Featured — " + featured.name + (featured.commander ? " · " + featured.commander : "");
+  } else {
+    $("hero-feat").textContent = "The library awaits its first deck";
+  }
+  const totalCards = decks.reduce((s,d) => s + d.cards, 0);
+  const commanders = decks.filter(d => d.commander).length;
+  const formats = new Set(decks.map(d => d.format)).size;
+  $("home-stats").innerHTML = [
+    [decks.length, "decks in the library"],
+    [totalCards, "cards catalogued"],
+    [commanders, "with commanders"],
+    [formats, "formats"],
+  ].map(([n, lbl]) => `<div class="stile"><b>${n}</b><span>${lbl}</span></div>`).join("");
+  $("home-recent").innerHTML = recent.slice(0, 4).map(deckCardHtml).join("")
+    || `<div class="empty"><div class="sigil">✧</div><h3>No decks yet</h3>Import one to light the forge.</div>`;
+}
+
+/* ---------- gallery ---------- */
+async function renderGallery() {
+  const decks = await (await fetch("/api/decks")).json();
+  if (decks.length && decks[0].colors === undefined) {
+    $("gallery-grid").innerHTML = STALE;
+    return;
+  }
+  $("gallery-grid").innerHTML = decks.map(deckCardHtml).join("")
+    || `<div class="empty"><div class="sigil">❖</div><h3>The gallery stands empty</h3>Import a deck to hang its banner here.</div>`;
+}
+
+/* ---------- analytics ---------- */
+async function loadAnalytics() {
+  const decks = await (await fetch("/api/decks")).json();
+  const pick = $("ana-pick");
+  const cur = pick.value;
+  pick.innerHTML = decks.map(d => `<option value="${esc(d.path)}" ${d.path===cur?"selected":""}>${esc(d.name)}</option>`).join("");
+  if (pick.value) renderAnalytics(pick.value);
+  else $("ana-grid").innerHTML = `<div class="empty"><div class="sigil">◭</div><h3>Nothing to divine</h3>Import a deck first.</div>`;
+}
+const COLOR_NAMES = {W:"White",U:"Blue",B:"Black",R:"Red",G:"Green"};
+async function renderAnalytics(path) {
+  const [a, d] = await Promise.all([
+    (await fetch("/api/analysis?path=" + encodeURIComponent(path))).json(),
+    (await fetch("/api/deck?path=" + encodeURIComponent(path))).json(),
+  ]);
+  if (!a.roles) { $("ana-grid").innerHTML = STALE; return; }
+  $("ana-bracket").textContent = "Bracket " + a.bracket;
+  $("ana-bracket").className = "badge " + (a.bracket >= 4 ? "warn" : "ok");
+  $("ana-bracket").title = a.game_changers.length ? "Game Changers: " + a.game_changers.join(", ") : "No Game Changers";
+  $("ana-price").textContent = "$" + a.price.toFixed(2) + (a.unpriced ? ` (+${a.unpriced} unpriced)` : "");
+
+  // curve
+  const buckets = Array.from({length: 8}, (_, i) => a.curve[String(i)] || 0);
+  const mx = Math.max(...buckets, 1);
+  const curveHtml = `<div class="card"><h3>Mana curve</h3><div id="curve-chart">` +
+    buckets.map((n, i) => `<div class="col"><span class="cnt">${n || ""}</span>
+      <div class="bar" style="height:${Math.max(2, n/mx*82)}%"></div>
+      <span class="lbl">${i === 7 ? "7+" : i}</span></div>`).join("") +
+    `</div><p class="hint">average ${a.avg_mv} · ${a.early_plays} early plays (mana value ≤ 2)</p></div>`;
+
+  // color balance: pips in costs vs land sources
+  const pipTotal = Object.values(a.pips).reduce((s,n) => s+n, 0) || 1;
+  const srcTotal = Object.values(a.sources).reduce((s,n) => s+n, 0) || 1;
+  const colorHtml = `<div class="card"><h3>Color balance</h3>` +
+    "WUBRG".split("").filter(c => a.pips[c] || a.sources[c]).map(c => {
+      const need = (a.pips[c] || 0) / pipTotal, have = (a.sources[c] || 0) / srcTotal;
+      const short = a.short_colors.includes(c);
+      return `<div class="bar-row"><span class="lb"><span class="pip ${c}">${c}</span> ${COLOR_NAMES[c]}</span>
+        <div class="tr"><div class="fl blue" style="width:${Math.round(need*100)}%"></div></div><span class="n">${Math.round(need*100)}% cost</span></div>
+        <div class="bar-row"><span class="lb"></span>
+        <div class="tr"><div class="fl ${short ? "short" : ""}" style="width:${Math.round(have*100)}%"></div></div><span class="n">${Math.round(have*100)}% lands</span></div>`;
+    }).join("") +
+    (a.short_colors.length ? `<p class="hint" style="color:#f0937f">Not enough lands make: ${a.short_colors.map(c => COLOR_NAMES[c]).join(", ")}</p>` : "") +
+    `</div>`;
+
+  // type breakdown + land/spell ratio from deck detail
+  const types = {};
+  let lands = 0, spells = 0;
+  const order = ["Creature","Instant","Sorcery","Artifact","Enchantment","Planeswalker","Battle","Land"];
+  for (const c of d.cards) {
+    const t = order.find(t => c.type_line.includes(t)) || "Other";
+    types[t] = (types[t] || 0) + c.qty;
+    c.type_line.includes("Land") ? lands += c.qty : spells += c.qty;
+  }
+  const tmax = Math.max(...Object.values(types), 1);
+  const typeHtml = `<div class="card"><h3>Type breakdown</h3>` +
+    [...order, "Other"].filter(t => types[t]).map(t =>
+      `<div class="bar-row"><span class="lb">${t}</span>
+       <div class="tr"><div class="fl" style="width:${Math.round(types[t]/tmax*100)}%"></div></div>
+       <span class="n">${types[t]}</span></div>`).join("") +
+    `<p class="hint">${lands} lands · ${spells} spells${d.size ? ` · ${Math.round(lands/Math.max(d.size,1)*100)}% land` : ""}</p></div>`;
+
+  // roles vs targets
+  const roleLabels = [["land","Lands","lands"],["ramp","Ramp","ramp"],["draw","Card draw","draw"],
+    ["removal","Removal","removal"],["board_wipe","Board wipes","board_wipe"],["tutor","Tutors",null]];
+  const rolesHtml = `<div class="card"><h3>Roles vs targets</h3>` +
+    roleLabels.map(([key, lbl, tkey]) => {
+      const n = (a.roles[key] || []).reduce((s, [,q]) => s+q, 0);
+      const target = tkey ? a.targets[tkey] : null;
+      const pct = target ? Math.min(100, n/target*100) : (n ? 100 : 0);
+      return `<div class="bar-row"><span class="lb">${lbl}</span>
+        <div class="tr"><div class="fl ${target && n < target ? "short" : ""}" style="width:${Math.round(pct)}%"></div></div>
+        <span class="n">${n}${target ? " / " + target : ""}</span></div>`;
+    }).join("") + `</div>`;
+
+  // warnings & win conditions
+  const wins = [];
+  if (a.roles.wincon) wins.push(...a.roles.wincon.map(([n]) => `"${n}" wins the game directly`));
+  const threats = (a.roles.threat || []).reduce((s,[,q]) => s+q, 0);
+  const evasive = (a.roles.evasive || []).reduce((s,[,q]) => s+q, 0);
+  const poison = (a.roles.poison || []).reduce((s,[,q]) => s+q, 0);
+  const mill = (a.roles.mill || []).reduce((s,[,q]) => s+q, 0);
+  if (threats) wins.push(`${threats} big creatures win through combat`);
+  if (evasive) wins.push(`${evasive} evasive creatures get damage through`);
+  if (poison) wins.push(`${poison} cards deal poison`);
+  if (mill) wins.push(`${mill} cards mill libraries`);
+  const warnHtml = `<div class="card"><h3>Ways to win &amp; warnings</h3>` +
+    (wins.length ? wins.map(w => `<div class="warnline okline"><span class="sig">✦</span>${esc(w)}</div>`).join("")
+      : `<div class="warnline"><span class="sig">⚠</span>No way to win detected — add threats, evasion, poison, mill, or a "you win" card.</div>`) +
+    a.violations.map(v => `<div class="warnline"><span class="sig">⚠</span>${esc(v)}</div>`).join("") +
+    `</div>`;
+
+  $("ana-grid").innerHTML = curveHtml + colorHtml + typeHtml + rolesHtml + warnHtml;
+}
+
+renderHome();
 loadDecks();
 searchCards();
 </script>

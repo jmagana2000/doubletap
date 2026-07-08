@@ -222,6 +222,36 @@ def test_complete_deck_caps_limited_cards(rigged_conn):
     assert added.count(rats) == 2
 
 
+def test_numpy_inference_matches_torch(rigged_conn, tmp_path):
+    """The .npz runtime must score exactly like the torch model it came from —
+    recommend/complete run on numpy weights in torch-less installs."""
+    from doubletap.ml.infer_np import load_np_checkpoint
+
+    vocab = build_vocab(rigged_conn, COMMANDER)
+    model = tiny_model(vocab)
+    save_checkpoint(tmp_path / "m.pt", model, vocab, "commander", "bc", {})
+    np_model, meta = load_np_checkpoint(tmp_path / "m.npz", vocab)
+    assert meta["algo"] == "bc"
+
+    atraxa = vocab.index[lookup(rigged_conn, "Atraxa, Praetors' Voice")[0].oracle_id]
+    sol = vocab.index[lookup(rigged_conn, "Sol Ring")[0].oracle_id]
+    for partial, cmdr in [
+        (np.array([sol], dtype=np.int64), atraxa),
+        (np.empty(0, dtype=np.int64), atraxa),
+        (np.array([sol, sol], dtype=np.int64), None),
+    ]:
+        torch_scores = score_state(model, vocab, COMMANDER, partial, cmdr)
+        np_scores = score_state(np_model, vocab, COMMANDER, partial, cmdr)
+        np.testing.assert_allclose(np_scores, torch_scores, rtol=1e-4, atol=1e-5)
+
+    # greedy completion follows the identical trajectory
+    added_t, _ = complete_deck(model, vocab, COMMANDER, np.empty(0, np.int64), atraxa)
+    added_n, _ = complete_deck(
+        np_model, vocab, COMMANDER, np.empty(0, np.int64), atraxa
+    )
+    assert added_t == added_n
+
+
 def test_checkpoint_round_trip_and_vocab_guard(rigged_conn, tmp_path):
     vocab = build_vocab(rigged_conn, COMMANDER)
     model = tiny_model(vocab)

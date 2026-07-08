@@ -504,6 +504,31 @@ def train_cql_cmd(
     typer.echo(f"Wrote {path}")
 
 
+@train_app.command("export")
+def train_export():
+    """Convert existing .pt checkpoints to torch-free .npz weights (needs
+    torch; new training runs write both automatically)."""
+    import torch
+
+    from .ml.infer_np import save_np_checkpoint
+
+    models_dir = db.data_home() / "models"
+    converted = 0
+    for pt in sorted(models_dir.glob("*.pt")):
+        ckpt = torch.load(pt, map_location="cpu")
+        save_np_checkpoint(
+            pt.with_suffix(".npz"),
+            ckpt["state_dict"],
+            ckpt["oracle_ids"],
+            ckpt["format"],
+            ckpt["algo"],
+        )
+        typer.echo(f"{pt.name} -> {pt.with_suffix('.npz').name}")
+        converted += 1
+    if not converted:
+        typer.echo("No .pt checkpoints found in ~/.doubletap/models/")
+
+
 @app.command("eval")
 def eval_cmd(
     model_path: Path = typer.Option(..., "--model", exists=True),
@@ -534,10 +559,13 @@ def eval_cmd(
 def _load_model(conn, fmt, model_path: Path | None):
     """Resolve and load the checkpoint plus its matching vocab. BC ships as
     default: CQL missed the agreed keep-bar (+2 recovery@50) on the reliable
-    200-deck eval."""
+    200-deck eval. Prefers the torch-free .npz weights; .pt needs torch
+    (run `doubletap train export` once to convert old checkpoints)."""
     if model_path is None:
         models_dir = db.data_home() / "models"
         for candidate in (
+            models_dir / f"bc_{fmt.name}.npz",
+            models_dir / f"cql_{fmt.name}.npz",
             models_dir / f"bc_{fmt.name}.pt",
             models_dir / f"cql_{fmt.name}.pt",
         ):
@@ -548,13 +576,18 @@ def _load_model(conn, fmt, model_path: Path | None):
             typer.echo("No trained model found; run doubletap train first.", err=True)
             raise typer.Exit(code=1)
 
-    # imported after the checkpoint check so a torch-less install still gets
-    # the friendly "no trained model" message instead of an import traceback
     from .ml.data import build_vocab
-    from .ml.model import load_checkpoint
 
     vocab = build_vocab(conn, fmt)
-    model, ckpt = load_checkpoint(model_path, vocab)
+    if model_path.suffix == ".npz":
+        from .ml.infer_np import load_np_checkpoint
+
+        model, ckpt = load_np_checkpoint(model_path, vocab)
+    else:
+        # torch path; kept for explicit --model foo.pt on training machines
+        from .ml.model import load_checkpoint
+
+        model, ckpt = load_checkpoint(model_path, vocab)
     return vocab, model, ckpt, model_path
 
 

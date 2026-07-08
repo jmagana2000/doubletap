@@ -1,0 +1,126 @@
+"""Backend-agnostic inference: masking, greedy completion, and evaluation.
+
+This module never imports torch. It drives any model exposing
+`score(partial_idxs, commander_idx, state_feats, pool) -> np.ndarray` —
+the torch TwoTowerQ for training-time eval, or the numpy NpTwoTowerQ that
+recommend/complete use at runtime."""
+
+import numpy as np
+
+from ..formats import FormatConfig
+from .data import CorpusDeck, Vocab, action_mask, state_features
+
+
+def score_state(
+    model,
+    vocab: Vocab,
+    fmt: FormatConfig,
+    partial_idxs: np.ndarray,
+    commander_idx: int | None,
+    partner_idx: int | None = None,
+    extra_mask: np.ndarray | None = None,
+) -> np.ndarray:
+    """Scores over the full vocab for one state; illegal actions are -inf.
+    `extra_mask` (bool, vocab-length) further restricts the pool — used for
+    budget caps."""
+    mask = action_mask(vocab, fmt, partial_idxs, commander_idx, partner_idx)
+    if extra_mask is not None:
+        mask = mask & extra_mask
+    pool = np.flatnonzero(mask)
+    feats = state_features(vocab, fmt, partial_idxs, commander_idx, partner_idx)
+    scores = np.full(len(vocab), -np.inf, dtype=np.float32)
+    scores[pool] = model.score(partial_idxs, commander_idx, feats, pool)
+    return scores
+
+
+def complete_deck(
+    model,
+    vocab: Vocab,
+    fmt: FormatConfig,
+    partial_idxs: np.ndarray,
+    commander_idx: int | None,
+    partner_idx: int | None = None,
+    extra_mask: np.ndarray | None = None,
+    capped_idxs: np.ndarray | None = None,
+    cap: int = 0,
+) -> tuple[list[int], np.ndarray]:
+    """Greedily fill the deck's nonland slots (deck size minus the land-target
+    slots), re-scoring after each add. Lands stay the user's job. Returns
+    (added indices in order, final partial).
+
+    `capped_idxs` cards may be added at most `cap` more times in total
+    (bracket-limited Game Changers); once the budget is spent they are masked.
+    Stops early if every remaining action is masked (tiny legal pools)."""
+    target_nonland = fmt.deck_size - round(fmt.land_fraction_target * fmt.deck_size)
+    if commander_idx is not None:
+        target_nonland -= 1  # the commander occupies a nonland slot
+    if partner_idx is not None:
+        target_nonland -= 1  # partner also occupies a nonland slot
+    partial = partial_idxs.copy()
+    added: list[int] = []
+    committed = sum(1 for x in (commander_idx, partner_idx) if x is not None)
+    capped_set = set(map(int, capped_idxs)) if capped_idxs is not None else None
+    remaining_cap = cap
+    while (
+        int((~vocab.land[partial]).sum()) < target_nonland
+        and partial.size + committed < fmt.deck_size
+    ):
+        mask = extra_mask
+        if capped_set is not None and remaining_cap <= 0:
+            mask = (
+                extra_mask.copy()
+                if extra_mask is not None
+                else np.ones(len(vocab), dtype=bool)
+            )
+            mask[list(capped_set)] = False
+        scores = score_state(
+            model, vocab, fmt, partial, commander_idx, partner_idx, mask
+        )
+        best = int(np.argmax(scores))
+        if not np.isfinite(scores[best]):
+            break
+        if capped_set is not None and best in capped_set:
+            remaining_cap -= 1
+        added.append(best)
+        partial = np.append(partial, best)
+    return added, partial
+
+
+def recovery_at_k(
+    model,
+    decks: list[CorpusDeck],
+    vocab: Vocab,
+    fmt: FormatConfig,
+    n_hide: int = 10,
+    ks: tuple[int, ...] = (10, 50, 100),
+    rng: np.random.Generator | None = None,
+    max_decks: int = 200,
+) -> dict:
+    """Hide n_hide random nonland cards per held-out deck; measure how many of
+    the hidden (distinct) cards appear in the model's top-k suggestions."""
+    rng = rng or np.random.default_rng(0)
+    totals = {k: [] for k in ks}
+    structural = []
+    for deck in decks[:max_decks]:
+        nonland = deck.nonland_positions
+        if nonland.size <= n_hide:
+            continue
+        hidden_pos = rng.choice(nonland, size=n_hide, replace=False)
+        keep = np.ones(deck.main_idxs.size, dtype=bool)
+        keep[hidden_pos] = False
+        partial = deck.main_idxs[keep]
+        hidden = np.unique(deck.main_idxs[hidden_pos])
+
+        scores = score_state(
+            model, vocab, fmt, partial, deck.commander_idx, deck.partner_idx
+        )
+        order = np.argsort(-scores)
+        for k in ks:
+            top = order[:k]
+            totals[k].append(len(np.intersect1d(top, hidden)) / hidden.size)
+        structural.append(float(np.mean(vocab.cmc[order[: ks[0]]])))
+    return {
+        "decks": len(totals[ks[0]]),
+        "recovery": {k: round(float(np.mean(v)) * 100, 2) for k, v in totals.items()},
+        "mean_top_cmc": round(float(np.mean(structural)), 2) if structural else None,
+    }
