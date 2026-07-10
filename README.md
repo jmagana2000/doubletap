@@ -1,5 +1,10 @@
 # DoubleTap
 
+[![PyPI](https://img.shields.io/pypi/v/doubletap)](https://pypi.org/project/doubletap/)
+[![Python](https://img.shields.io/pypi/pyversions/doubletap)](https://pypi.org/project/doubletap/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Downloads](https://static.pepy.tech/badge/doubletap)](https://pepy.tech/project/doubletap)
+
 A command-line tool that helps you build Magic: The Gathering decks. Tell it
 what cards you have, and it suggests what to add next — learned from thousands
 of real decks built by other players, not a game simulator.
