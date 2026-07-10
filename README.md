@@ -16,6 +16,9 @@ of real decks built by other players, not a game simulator.
 
 **What it does not do:** simulate games or manage your collection.
 
+**Status:** personal hobby project, actively developed. Issues and ideas
+welcome; no support promises.
+
 This README is a guided introduction. For the complete reference — every
 command and option, maintenance procedures, and failure recovery — see the
 [operating manual](docs/operating-manual.md).
