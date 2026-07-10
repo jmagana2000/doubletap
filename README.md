@@ -4,6 +4,8 @@ A command-line tool that helps you build Magic: The Gathering decks. Tell it
 what cards you have, and it suggests what to add next — learned from thousands
 of real decks built by other players, not a game simulator.
 
+![Deck Builder — searchable card grid with filters, deck shelf, and live legality](docs/img/deck-builder.png)
+
 **What it does:**
 - Imports your cards from a photo, a text file, or a spreadsheet export
 - Suggests cards that work well with what you already have
@@ -293,6 +295,10 @@ The detection is heuristic — a card with unusual wording may be missed — so
 treat it as a gap-spotter, not a grade. The full gameplay-knowledge audit
 behind these checks lives in `docs/gameplay-blindspots.md`.
 
+The web UI (`doubletap web`) shows the same analysis as live charts:
+
+![Deck Analytics — mana curve, color balance, type breakdown, roles vs targets](docs/img/analytics.png)
+
 ### What your deck costs — and building on a budget
 
 Card prices come from Scryfall's market data and are already in your local
@@ -406,7 +412,10 @@ doubletap recommend --deck my-deck.json -k 20 --personalize 0.5
 ## Training a model (advanced)
 
 The suggestion engine learns from real public decklists. You only need to do
-this once (or redo it after a big card set release).
+this once (or redo it after a big card set release). Every step below is also
+available in the web UI's Data & Models tab:
+
+![Data & Models — corpus crawling and model training from the web UI](docs/img/training.png)
 
 ### Step 1 — Download public decklists
 
