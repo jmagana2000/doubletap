@@ -36,9 +36,20 @@ any deck you import is treated as one of these two.
 
 ### 1. Install
 
-The recommended installer is [uv](https://docs.astral.sh/uv/) — it reads the
-repo's `.python-version` (3.11) and `uv.lock`, so one command builds the
-right environment every time:
+**Just want to use it?** DoubleTap is on [PyPI](https://pypi.org/project/doubletap/):
+
+```bash
+uv tool install doubletap
+doubletap web
+```
+
+That's the whole install — no Python knowledge needed beyond having
+[uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+Suggestions run on lightweight numpy weights, so no PyTorch required.
+
+**Developing or training models?** Work from a clone — uv reads the repo's
+`.python-version` (3.11) and `uv.lock`, so one command builds the right
+environment every time:
 
 ```bash
 uv sync --extra dev --extra ocr --extra ml
