@@ -4,7 +4,7 @@ A command-line tool that helps you build Magic: The Gathering decks. Tell it
 what cards you have, and it suggests what to add next — learned from thousands
 of real decks built by other players, not a game simulator.
 
-![Deck Builder — searchable card grid with filters, deck shelf, and live legality](docs/img/deck-builder.png)
+![Deck Builder — searchable card grid with filters, deck shelf, and live legality](https://raw.githubusercontent.com/jmagana2000/doubletap/main/docs/img/deck-builder.png)
 
 **What it does:**
 - Imports your cards from a photo, a text file, or a spreadsheet export
@@ -297,7 +297,7 @@ behind these checks lives in `docs/gameplay-blindspots.md`.
 
 The web UI (`doubletap web`) shows the same analysis as live charts:
 
-![Deck Analytics — mana curve, color balance, type breakdown, roles vs targets](docs/img/analytics.png)
+![Deck Analytics — mana curve, color balance, type breakdown, roles vs targets](https://raw.githubusercontent.com/jmagana2000/doubletap/main/docs/img/analytics.png)
 
 ### What your deck costs — and building on a budget
 
@@ -415,7 +415,7 @@ The suggestion engine learns from real public decklists. You only need to do
 this once (or redo it after a big card set release). Every step below is also
 available in the web UI's Data & Models tab:
 
-![Data & Models — corpus crawling and model training from the web UI](docs/img/training.png)
+![Data & Models — corpus crawling and model training from the web UI](https://raw.githubusercontent.com/jmagana2000/doubletap/main/docs/img/training.png)
 
 ### Step 1 — Download public decklists
 
