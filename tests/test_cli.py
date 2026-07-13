@@ -359,8 +359,8 @@ def test_ml_pipeline_end_to_end(loaded_conn, tmp_path):
     result = runner.invoke(app, ["recommend", "--deck", str(deck), "-k", "3"])
     assert result.exit_code == 0, result.output
     assert "Top 3 additions" in result.output
-    # default resolution prefers the torch-free weights
-    assert "bc_commander.npz" in result.output
+    # default resolution: CQL first (cleared the keep-bar), torch-free weights
+    assert "cql_commander.npz" in result.output
 
     # explicit torch checkpoint still works on training machines
     result = runner.invoke(

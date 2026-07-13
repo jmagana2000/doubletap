@@ -24,8 +24,8 @@ Data home layout:
 ├── doubletap.db          # SQLite: card cache + training corpus
 ├── decks/                # your saved decks, one JSON file each
 ├── models/               # trained checkpoints and synergy tables
-│   ├── bc_commander.pt   #   behavior-cloning model (the default)
-│   ├── cql_commander.pt  #   CQL model (experimental alternative)
+│   ├── cql_commander.pt  #   CQL model (the default since it cleared the keep-bar)
+│   ├── bc_commander.pt   #   behavior-cloning baseline (fallback)
 │   └── pmi_commander.npz #   card-synergy table
 └── corpus/raw/           # compressed raw crawl shards (rebuildable source)
 ```
@@ -283,14 +283,19 @@ They differ in what the network is taught:
   part is a penalty that keeps value estimates anchored to cards actually
   seen in human decks — without it, offline RL notoriously overrates cards
   it has never seen tried.
-- **Why BC is the default.** The two are compared on the same held-out test
-  (`eval`: hide cards from unseen decks, measure recovery@k) under a
-  pre-committed decision rule: CQL ships as default only if it beats BC by
-  at least 2 points of recovery@50. On the full corpus it didn't clear that
-  bar, so `recommend` prefers `bc_<format>` and CQL remains available as an
-  experiment via `--model`. One honest caveat: CQL's reward is a statistic
-  of the same corpus BC imitates, so a large CQL edge was never likely —
-  the keep-bar exists to stop the fancier model from shipping on vibes.
+- **Why CQL is the default (and wasn't always).** The two are compared on
+  the same held-out test (`eval`: hide cards from unseen decks, measure
+  recovery@k) under a decision rule committed *before* looking at results:
+  CQL ships as default only if it beats BC by at least 2 points of
+  recovery@50. On earlier corpora it missed the bar and BC shipped. On the
+  2026-07-13 full-corpus retrain, CQL cleared it — 20.79 vs 18.47
+  recovery@50 (+2.32) on the 200-deck holdout, winning at every k and with
+  a slightly cheaper suggestion curve — so `recommend` now prefers
+  `cql_<format>` with BC as the fallback. One honest caveat stands: CQL's
+  reward is a statistic of the same corpus BC imitates, so the margin was
+  never going to be huge — the keep-bar exists to stop the fancier model
+  from shipping on vibes, and equally to promote it the moment the
+  evidence is real.
 
 Training order: `corpus crawl` → `corpus pmi` → `train bc` → (optionally)
 `train cql`, which initializes from the BC checkpoint.
@@ -345,7 +350,7 @@ synergy rationale ("with Sol Ring (10.5)") and a land-count gap report.
 |---|---|---|
 | `--deck` | required | The deck JSON file to suggest additions for |
 | `-k` | 20 | How many suggestions to show |
-| `--model` | auto | Checkpoint to use; defaults to `bc_<format>.pt`, falling back to `cql_<format>.pt` |
+| `--model` | auto | Checkpoint to use; defaults to `cql_<format>`, falling back to `bc_<format>` (CQL cleared the keep-bar on 2026-07-13) |
 | `--personalize` | 0.3 | 0–1 blend of the model score with card frequencies among corpus decks most similar to yours; higher favors decks like yours, 0 disables |
 | `--max-card-price` | none | Per-card USD budget cap; only cards at or under this market price are suggested (unpriced cards stay eligible) |
 

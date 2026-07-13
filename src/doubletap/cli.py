@@ -557,17 +557,18 @@ def eval_cmd(
 
 
 def _load_model(conn, fmt, model_path: Path | None):
-    """Resolve and load the checkpoint plus its matching vocab. BC ships as
-    default: CQL missed the agreed keep-bar (+2 recovery@50) on the reliable
-    200-deck eval. Prefers the torch-free .npz weights; .pt needs torch
+    """Resolve and load the checkpoint plus its matching vocab. CQL ships as
+    default: on the 2026-07-13 full-corpus retrain it cleared the agreed
+    keep-bar (+2 recovery@50) — 20.79 vs 18.47 on the 200-deck holdout — with
+    BC as fallback. Prefers the torch-free .npz weights; .pt needs torch
     (run `doubletap train export` once to convert old checkpoints)."""
     if model_path is None:
         models_dir = db.data_home() / "models"
         for candidate in (
-            models_dir / f"bc_{fmt.name}.npz",
             models_dir / f"cql_{fmt.name}.npz",
-            models_dir / f"bc_{fmt.name}.pt",
+            models_dir / f"bc_{fmt.name}.npz",
             models_dir / f"cql_{fmt.name}.pt",
+            models_dir / f"bc_{fmt.name}.pt",
         ):
             if candidate.exists():
                 model_path = candidate
@@ -666,7 +667,7 @@ def recommend(
     model_path: Path = typer.Option(
         None,
         "--model",
-        help="Checkpoint; defaults to bc_<format>.pt, falling back to cql_<format>.pt",
+        help="Checkpoint; defaults to cql_<format>, falling back to bc_<format>",
     ),
     personalize: float = typer.Option(
         0.3,
