@@ -1,4 +1,4 @@
-# MTG Gameplay Knowledge → Blindspot Analysis
+# Magic: The Gathering Gameplay Knowledge → Blindspot Analysis
 
 ## The elicitation prompt
 

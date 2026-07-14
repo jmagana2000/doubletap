@@ -1,6 +1,7 @@
 # DoubleTap Operating Manual
 
-The complete reference for operating DoubleTap: every command and option,
+The complete reference for operating DoubleTap, the Magic: The Gathering
+(MTG) deck-building assistant: every command and option,
 data locations, standard workflows, maintenance procedures, and failure
 recovery. For a gentle introduction, read the [README](../README.md) first.
 
