@@ -8,7 +8,7 @@ from doubletap.ml.data import build_vocab, load_corpus, sample_batch  # noqa: E4
 from doubletap.ml.eval import complete_deck, recovery_at_k, score_state  # noqa: E402
 from doubletap.ml.model import TwoTowerQ, load_checkpoint, save_checkpoint  # noqa: E402
 from doubletap.ml.reward import build_pmi, corpus_card_sets  # noqa: E402
-from doubletap.ml.train_bc import bc_loss, sample_negatives, split_corpus  # noqa: E402
+from doubletap.ml.train_bc import bc_loss, sample_negatives  # noqa: E402
 from doubletap.ml.train_cql import batch_rewards, cql_losses  # noqa: E402
 
 from test_ml_data import _insert_corpus_deck  # noqa: E402

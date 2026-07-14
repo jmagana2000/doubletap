@@ -2,8 +2,11 @@
 
 [![PyPI](https://img.shields.io/pypi/v/doubletap)](https://pypi.org/project/doubletap/)
 [![Python](https://img.shields.io/pypi/pyversions/doubletap)](https://pypi.org/project/doubletap/)
+[![Tests](https://img.shields.io/github/actions/workflow/status/jmagana2000/doubletap/test.yml?label=tests)](https://github.com/jmagana2000/doubletap/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Downloads](https://static.pepy.tech/badge/doubletap)](https://pepy.tech/project/doubletap)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 A command-line tool that helps you build Magic: The Gathering decks. Tell it
 what cards you have, and it suggests what to add next — learned from thousands

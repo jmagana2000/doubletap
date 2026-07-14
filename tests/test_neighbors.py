@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from doubletap.formats import COMMANDER
 from doubletap.ml.data import build_vocab

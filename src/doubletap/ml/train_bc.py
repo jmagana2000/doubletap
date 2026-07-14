@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 from ..db import data_home
 from ..formats import FormatConfig
-from .data import CorpusDeck, Vocab, build_vocab, load_corpus, sample_batch
+from .data import CorpusDeck, build_vocab, load_corpus, sample_batch
 from .eval import recovery_at_k
 from .model import TwoTowerQ, save_checkpoint
 

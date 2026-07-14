@@ -4,7 +4,6 @@ import random
 import sqlite3
 import time
 from collections import Counter
-from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
