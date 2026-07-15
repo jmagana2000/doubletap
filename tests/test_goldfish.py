@@ -169,3 +169,37 @@ def test_calibration_land_drops_vs_karsten(lands, size, on_play, published):
     assert r["land3_rate"] == pytest.approx(published, abs=0.03), (
         f"{lands}/{size} on_play={on_play}: sim {r['land3_rate']} vs Karsten {published}"
     )
+
+
+# --- Stage 2: reward shaping ---------------------------------------------------
+
+
+def test_shaper_delta_and_vocab_statics(loaded_conn):
+    from doubletap.formats import COMMANDER
+    from doubletap.ml.data import build_vocab
+    from doubletap.ml.goldfish import Shaper, slice_deck, vocab_statics
+    from doubletap.names import lookup
+
+    vocab = build_vocab(loaded_conn, COMMANDER)
+    vs = vocab_statics(loaded_conn, vocab)
+    assert vs.n == len(vocab)
+
+    def idx(name):
+        return vocab.index[lookup(loaded_conn, name)[0].oracle_id]
+
+    # statics line up with the vocab
+    assert vs.land[idx("Swamp")] and not vs.land[idx("Sol Ring")]
+    assert vs.prod_amount[idx("Sol Ring")] == 2
+
+    shaper = Shaper(vs, weight=1.0, games=4, turns=6)
+    swamps = np.array([idx("Swamp")] * 20 + [idx("Juzám Djinn")] * 5, dtype=np.int64)
+    assert shaper.phi(np.empty(0, dtype=np.int64), None) == 0.0  # tiny partial
+    phi = shaper.phi(swamps, None)
+    assert 0.0 < phi <= 1.0
+    delta = shaper.delta(swamps, idx("Sol Ring"), None)
+    assert isinstance(delta, float)
+
+    # deterministic: same inputs, same phi
+    assert shaper.phi(swamps, None) == phi
+    ds = slice_deck(vs, swamps, idx("Juzám Djinn"))
+    assert ds.commander_mv == 4

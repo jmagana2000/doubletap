@@ -158,6 +158,43 @@ def structural_quality(
     }
 
 
+def goldfish_quality(
+    model,
+    decks: list[CorpusDeck],
+    vocab: Vocab,
+    fmt: FormatConfig,
+    statics,
+    mask_frac: float = 0.5,
+    rng: np.random.Generator | None = None,
+    max_decks: int = 50,
+    games: int = 100,
+) -> dict:
+    """Mean goldfish score of the model's greedy completions — the
+    simulator-based counterpart of structural_quality (statics from
+    goldfish.vocab_statics)."""
+    from .goldfish import simulate, slice_deck
+
+    rng = rng or np.random.default_rng(0)
+    scores = []
+    for deck in decks[:max_decks]:
+        nonland = deck.nonland_positions
+        if nonland.size < 10:
+            continue
+        hidden = rng.choice(nonland, size=int(nonland.size * mask_frac), replace=False)
+        keep = np.ones(deck.main_idxs.size, dtype=bool)
+        keep[hidden] = False
+        partial = deck.main_idxs[keep]
+        _, final = complete_deck(
+            model, vocab, fmt, partial, deck.commander_idx, deck.partner_idx
+        )
+        ds = slice_deck(statics, final, deck.commander_idx)
+        scores.append(simulate(ds, games=games, turns=10, seed=0)["score"])
+    return {
+        "decks": len(scores),
+        "goldfish_score": round(float(np.mean(scores)), 4) if scores else 0.0,
+    }
+
+
 def recovery_at_k(
     model,
     decks: list[CorpusDeck],

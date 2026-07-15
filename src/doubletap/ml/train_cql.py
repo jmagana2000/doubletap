@@ -16,19 +16,20 @@ from .reward import PMIModel, step_reward
 from .train_bc import batch_to_tensors, sample_negatives, split_corpus
 
 
-def batch_rewards(pmi, vocab, fmt, batch) -> torch.Tensor:
+def batch_rewards(pmi, vocab, fmt, batch, shaper=None) -> torch.Tensor:
     bounds = np.append(batch.offsets, batch.bag.size)
-    rewards = [
-        step_reward(
-            pmi,
-            vocab,
-            fmt,
-            batch.bag[bounds[i] : bounds[i + 1]],
-            int(batch.action[i]),
-            bool(batch.done[i]),
+    rewards = []
+    for i in range(len(batch.action)):
+        partial = batch.bag[bounds[i] : bounds[i + 1]]
+        r = step_reward(
+            pmi, vocab, fmt, partial, int(batch.action[i]), bool(batch.done[i])
         )
-        for i in range(len(batch.action))
-    ]
+        if shaper is not None:
+            cmdr = int(batch.commander[i])
+            r += shaper.delta(
+                partial, int(batch.action[i]), cmdr if cmdr >= 0 else None
+            )
+        rewards.append(r)
     return torch.tensor(rewards, dtype=torch.float32)
 
 
@@ -80,6 +81,7 @@ def train_cql(
     tau: float = 0.005,
     seed: int = 0,
     init_from: Path | None = None,
+    shaper=None,
     log=print,
 ) -> Path:
     torch.manual_seed(seed)
@@ -105,7 +107,7 @@ def train_cql(
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     for step in range(1, steps + 1):
         batch = sample_batch(train, vocab, fmt, batch_size, rng, with_next=True)
-        rewards = batch_rewards(pmi, vocab, fmt, batch)
+        rewards = batch_rewards(pmi, vocab, fmt, batch, shaper)
         negatives = sample_negatives(pool, batch_size, k_negatives, rng)
         next_candidates = sample_negatives(pool, batch_size, k_negatives, rng)
         td, conservative = cql_losses(

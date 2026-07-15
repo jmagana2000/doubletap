@@ -16,7 +16,6 @@ import numpy as np
 
 from ..analysis import (
     _is_land,
-    _mana_cost,
     color_pip_counts,
     etb_tapped,
     is_land_ramp,
@@ -293,3 +292,89 @@ def simulate(
         "land4_rate": round(m["land4"] / g, 4),
         "avg_mulligans": round(m["mulligans"] / g, 3),
     }
+
+
+# --- Stage 2: reward shaping (docs/goldfish-sim-design.md) ---------------------
+
+
+def vocab_statics(conn, vocab) -> DeckStatic:
+    """Card statics aligned to a Vocab's indices, compiled once per training
+    run. Slicing these arrays by deck indices yields a DeckStatic without
+    touching card dicts again."""
+    import json as _json
+
+    rows: list[dict | None] = [None] * len(vocab)
+    for oid, raw in conn.execute("SELECT oracle_id, json FROM cards"):
+        i = vocab.index.get(oid)
+        if i is not None:
+            rows[i] = _card_statics(_json.loads(raw))
+    assert all(r is not None for r in rows)
+    return DeckStatic(
+        n=len(rows),
+        land=np.array([r["land"] for r in rows], dtype=bool),
+        tapped=np.array([r["tapped"] for r in rows], dtype=bool),
+        prod_colors=np.array([r["prod_colors"] for r in rows], dtype=bool),
+        prod_amount=np.array([r["prod_amount"] for r in rows], dtype=np.int8),
+        is_creature=np.array([r["is_creature"] for r in rows], dtype=bool),
+        mv=np.array([r["mv"] for r in rows], dtype=np.int16),
+        generic=np.array([r["generic"] for r in rows], dtype=np.int16),
+        pips=np.array([r["pips"] for r in rows], dtype=np.int8),
+        ramp_spell=np.array([r["ramp_spell"] for r in rows], dtype=bool),
+    )
+
+
+def slice_deck(
+    vs: DeckStatic, idxs: np.ndarray, commander_idx: int | None = None
+) -> DeckStatic:
+    """A concrete deck as a view of vocab-level statics."""
+    ds = DeckStatic(
+        n=int(idxs.size),
+        land=vs.land[idxs],
+        tapped=vs.tapped[idxs],
+        prod_colors=vs.prod_colors[idxs],
+        prod_amount=vs.prod_amount[idxs],
+        is_creature=vs.is_creature[idxs],
+        mv=vs.mv[idxs],
+        generic=vs.generic[idxs],
+        pips=vs.pips[idxs],
+        ramp_spell=vs.ramp_spell[idxs],
+    )
+    if commander_idx is not None:
+        ds.commander_mv = int(vs.mv[commander_idx])
+        ds.commander_generic = int(vs.generic[commander_idx])
+        ds.commander_pips = vs.pips[commander_idx]
+    return ds
+
+
+class Shaper:
+    """Potential-based reward shaping: r += weight * (gamma*phi(s') - phi(s)),
+    phi = goldfish score of the partial deck. Dense credit at every step —
+    the fix for the terminal-only failure mode of the 2026-07-15 structural
+    reward experiment. Fixed seed keeps phi deterministic (common random
+    numbers across the s/s' pair)."""
+
+    def __init__(self, vs: DeckStatic, gamma: float = 0.99, weight: float = 1.0,
+                 games: int = 4, turns: int = 8, seed: int = 0):
+        self.vs = vs
+        self.gamma = gamma
+        self.weight = weight
+        self.games = games
+        self.turns = turns
+        self.seed = seed
+
+    def phi(self, idxs: np.ndarray, commander_idx: int | None) -> float:
+        if idxs.size < 8:
+            return 0.0  # too small to goldfish meaningfully
+        ds = slice_deck(self.vs, idxs, commander_idx)
+        if not ds.land.any():
+            return 0.0
+        return simulate(
+            ds, games=self.games, turns=self.turns, seed=self.seed
+        )["score"]
+
+    def delta(
+        self, partial: np.ndarray, action: int, commander_idx: int | None
+    ) -> float:
+        before = self.phi(partial, commander_idx)
+        after = self.phi(np.append(partial, action), commander_idx)
+        return self.weight * (self.gamma * after - before)
