@@ -1064,6 +1064,47 @@ def deck_price(
         typer.echo(f"  ${line_total:>8,.2f}  {name}{qty_str}")
 
 
+@deck_app.command("goldfish")
+def deck_goldfish(
+    path: Path = typer.Argument(..., exists=True, readable=True),
+    games: int = typer.Option(200, help="Number of solitaire games to simulate"),
+    turns: int = typer.Option(10, help="Turns per game"),
+    draw: bool = typer.Option(False, "--draw", help="Simulate on the draw"),
+):
+    """Goldfish the deck: solitaire games measuring how it actually plays —
+    mana efficiency, curve-outs, dead turns, land drops. No opponent."""
+    from .ml.goldfish import compile_deck, simulate
+
+    conn = db.connect()
+    deck = decks.Deck.load(path)
+    cards = [(formats.get_card(conn, oid), qty) for oid, qty in deck.entries.items()]
+    commander = formats.get_card(conn, deck.commander) if deck.commander else None
+    ds = compile_deck(cards, commander)
+    if not ds.land.any():
+        typer.echo(
+            "This deck has no lands — a goldfish can't play without a mana"
+            " base. Add lands first (deck analyze recommends a count).",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    r = simulate(ds, games=games, turns=turns, on_play=not draw)
+
+    typer.echo(f"{deck.format} deck, {ds.n} cards goldfished over {r['games']} games:")
+    typer.echo(f"  goldfish score        {r['score']:.3f}  (0-1, higher is better)")
+    typer.echo(
+        f"  mana efficiency       {r['mana_efficiency']:.1%} of available mana spent"
+    )
+    typer.echo(
+        f"  curve-out rate        {r['curve_out_rate']:.1%} of turns 2-6 cast on curve"
+    )
+    typer.echo(f"  dead turns            {r['dead_turn_rate']:.1%}")
+    if r["commander_on_curve"] is not None:
+        typer.echo(f"  commander on curve    {r['commander_on_curve']:.1%} of games")
+    typer.echo(f"  3 lands by turn 3     {r['land3_rate']:.1%}")
+    typer.echo(f"  4 lands by turn 4     {r['land4_rate']:.1%}")
+    typer.echo(f"  avg mulligans         {r['avg_mulligans']:.2f}")
+
+
 @deck_app.command("validate")
 def deck_validate(path: Path = typer.Argument(..., exists=True, readable=True)):
     """Check a deck JSON against its format's construction and legality rules.

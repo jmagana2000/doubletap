@@ -29,6 +29,7 @@ ALL_COMMANDS = [
     ("deck", "analyze"),
     ("deck", "price"),
     ("deck", "validate"),
+    ("deck", "goldfish"),
     ("corpus", "crawl"),
     ("corpus", "stats"),
     ("corpus", "pmi"),

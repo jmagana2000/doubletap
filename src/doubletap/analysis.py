@@ -230,6 +230,51 @@ def is_cheap_draw_ramp(card: dict) -> bool:
     return "ramp" in roles or "draw" in roles
 
 
+# --- Goldfish-simulation card statics (docs/goldfish-sim-design.md) -----------
+
+_ETB_TAPPED_RE = re.compile(r"enters (?:the battlefield )?tapped", re.I)
+_ADD_CLAUSE_RE = re.compile(r"\badd ((?:\{[^}]+\})+|one mana of any color)", re.I)
+_LAND_TO_BATTLEFIELD_RE = re.compile(
+    r"search your library for .{0,40}land .{0,60}onto the battlefield", re.I
+)
+
+
+def etb_tapped(card: dict) -> bool:
+    """Unconditionally enters tapped. Conditional lands (check/fast/reveal)
+    are treated as untapped — ponytail: optimistic v1, model conditions if
+    calibration demands it."""
+    text = _oracle_text(card)
+    if "unless" in text.casefold() or "you may" in text.casefold():
+        return False
+    return bool(_ETB_TAPPED_RE.search(text))
+
+
+def mana_production(card: dict) -> tuple[list[str], int]:
+    """(colors producible, mana amount per activation) parsed from the
+    card's 'Add ...' clause. Sol Ring -> ([], 2) with colorless counted via
+    empty color list + amount; 'any color' -> all five. Returns ([], 0) for
+    non-producers."""
+    produced = [c for c in (card.get("produced_mana") or []) if c in "WUBRG"]
+    best = 0
+    for m in _ADD_CLAUSE_RE.finditer(_oracle_text(card)):
+        clause = m.group(1)
+        if clause.casefold().startswith("one mana"):
+            best = max(best, 1)
+        else:
+            best = max(best, len(re.findall(r"\{[^}]+\}", clause)))
+    if best == 0 and (card.get("produced_mana") or []):
+        best = 1  # produced_mana without a parseable clause: assume 1
+    return produced, best
+
+
+def is_land_ramp(card: dict) -> bool:
+    """Spell that puts a land onto the battlefield when cast (Cultivate,
+    Rampant Growth)."""
+    if _is_land(card):
+        return False
+    return bool(_LAND_TO_BATTLEFIELD_RE.search(_oracle_text(card)))
+
+
 # --- Curve and color balance ---------------------------------------------------
 
 CURVE_TOP_BUCKET = 7  # mana values 7+ share one histogram bucket

@@ -307,6 +307,18 @@ The web UI (`doubletap web`) shows the same analysis as live charts:
 
 ![Deck Analytics — mana curve, color balance, type breakdown, roles vs targets](https://raw.githubusercontent.com/jmagana2000/doubletap/main/docs/img/analytics.png)
 
+### Goldfishing: how does the deck actually play?
+
+```bash
+doubletap deck goldfish ~/.doubletap/decks/my-deck.json
+```
+
+This deals your deck hundreds of solitaire games — shuffle, mulligan, play
+lands, cast what the mana allows — and reports how it *functions*: how much
+of your mana you actually use, how often you curve out, how often you sit
+on dead turns, and whether your commander comes down on time. The
+simulation's math is calibrated against Frank Karsten's published research.
+
 ### What your deck costs — and building on a budget
 
 Card prices come from Scryfall's market data and are already in your local

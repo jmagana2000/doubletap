@@ -228,6 +228,20 @@ poison/mill), market price. Heuristic — see `docs/gameplay-blindspots.md`.
 |---|---|---|
 | `PATH` | required | The deck JSON file to analyze |
 
+**`deck goldfish PATH`** — solitaire simulation of how the deck actually
+plays: shuffle, mulligan (Karsten's model), play lands, cast greedily.
+Reports a 0–1 goldfish score plus mana efficiency, curve-out rate, dead
+turns, commander-on-curve, and land-drop rates. No opponent — it measures
+function, not matchups. Calibrated against Frank Karsten's published
+land-drop tables (docs/goldfish-sim-design.md).
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PATH` | required | The deck JSON file to goldfish |
+| `--games` | 200 | Simulated games (more = tighter estimates, slower) |
+| `--turns` | 10 | Turns per game |
+| `--draw` | off | Simulate on the draw instead of the play |
+
 **`deck price PATH`** — total USD (Scryfall market, cheapest finish) plus
 the most expensive cards; lists unpriced cards.
 
