@@ -67,6 +67,57 @@ for `deck analyze` (archetype-aware land targets instead of one
 regression), and the goldfish-simulation methodology is exactly the
 non-circular reward proposed in §Results.
 
+### A2. Karsten's mulligan math and Limited numbers (ingested 2026-07-15,
+read directly from the primary text of "How Many Lands Do You Need to
+Consistently Hit Your Land Drops?", 2017, plus the teryror methodology
+expansion)
+
+**The canonical mulligan model** (the assumption behind all his tables):
+mulligan any 7-card hand with 0/1/6/7 lands; any 6-carder with 0/1/5/6;
+any 5-carder with 0/5; keep any 4-carder; scry land-to-top after a
+mulligan. (2017 = Vancouver scry era; his 2022 update re-ran everything
+under the London mulligan — the regression we shipped comes from that
+update.)
+
+**60-card land-drop probabilities** (draw/play, under that rule):
+- 25 lands: 3 lands by T3 = 94.6%/90.4%, 4 by T4 = 83.5%/74.7%, mana
+  flood (8+ lands by T7) = 15.2% — his reference "midrange" point
+- His working consistency targets: ~90% on the land drop you *need*,
+  ~75–85% on the one you *want*
+- **On the draw is worth ~3 lands**: 26 lands on the play ≈ 23 on the
+  draw for the same consistency — boarding out a land on the draw is
+  mathematically sound (he tempers it: costs mulligan frequency)
+- Archetype ladder: 18–20 lands = low curve (avg CMC < 1.4), 21–23 =
+  aggro, 24–25 = midrange, 26–27 = control (avg CMC > 3)
+
+**Original regression lineage**: 2017 fit over 110 PT/GP decks
+(R² = 0.614): `lands = 16 + 3.14 × avgCMC`, counting Attune/Aether
+Vial/Mox Opal as lands and mana dorks/rocks/cantrips as spells. The 2022
+update (already §1A) refines this to `19.59 + 1.90·MV − 0.28·cheapDrawRamp`
+with MDFC fractions. Notable observation: all three Pro Tour winners in
+his sample sat *above* the regression line — "when in doubt, add the
+land."
+
+**Limited (40-card) numbers**:
+- **17 lands is the justified standard**: 3 by T3 = 95.6%/91.6%, 4 by T4
+  = 85.6%/77.0%, flood 14.9% — and 17 ≈ 25 × 40/60, so Limited and
+  Constructed guidance are one consistent system (Commander: × 99/60 →
+  41.25)
+- 16 lands (low curves): 94.0%/89.2% on T3, 81.3%/71.7% on T4
+- 40-card colored sources (from the §1A tables): a 1CC card wants 12
+  sources in a 17-land Limited deck
+- From the methodology expansion: **color-aware mulligans dominate
+  land-count-only mulligans** — in one worked example, castability of a
+  turn-1 colored spell rises from 59.4% to 91.8% at a cost of only ~0.7
+  expected opening-hand cards; keepable-land tables by curve for 40
+  cards: ~15 (low curve) / 17–18 (mid) / 20 (high)
+
+**DoubleTap relevance**: Modern is a 60-card format — the archetype
+ladder and draw/play asymmetry could refine `karsten_land_target` for
+Modern decks; the mulligan model is the exact keep/mull logic a future
+goldfish simulator should implement (§Results future work); Limited is
+out of scope (unsupported format) but recorded for completeness.
+
 ### B. EDHREC's lift metric — validates our reward core
 
 Verified directly against EDHREC's methodology article: their production

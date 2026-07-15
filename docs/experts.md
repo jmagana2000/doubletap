@@ -28,9 +28,16 @@ here with their canonical contributions and home venues.
   - *Hypergeometric fundamentals*: 14 single-color sources → 86.1% in
     opening 7; 18 sources → 68.6% for CC; the machinery behind all of the
     above
-- **Also writes** (not yet ingested; lower relevance to a deck builder):
-  Limited tier lists and format guides, mulligan strategy math, metagame
-  number-crunching, tournament reports
+- **Mulligan math and Limited work (ingested 2026-07-15**, primary text
+  read directly): the canonical mulligan model behind his tables, 60-card
+  land-drop probability tables, the draw-is-worth-3-lands asymmetry, the
+  original 2017 regression (`16 + 3.14·avgCMC`, R²=0.614) and its lineage
+  to the 2022 update, the 17-lands-in-Limited justification, and 40-card
+  source tables — see docs/rl-strategy-research.md §A2
+- **Still not ingested** (low relevance): set-specific Limited tier
+  lists, metagame number-crunching, tournament reports
+- **Credentials precision** (from his own bio): PhD in *cooperative game
+  theory and stochastic operations research*; Pro Tour Hall of Fame 2009
 - **Used in DoubleTap**: `analysis.karsten_land_target`, `SOURCES_NEEDED`,
   `source_weights`, `effective_lands` — surfaced in `deck analyze`, the
   web Analytics, and `recommend`'s gap report
