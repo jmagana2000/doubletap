@@ -55,3 +55,26 @@ reproduces Karsten's published P(3 lands by T3) within ±3 points at
   completions improves ≥10% AND recovery@50 regresses ≤1 point vs the
   current champion; else reverts to experiment status like its
   predecessor.
+
+## Stage 2 result (2026-07-15): keep-bar FAILED — shaping shipped inert
+
+| | champion | goldfish-shaped CQL (w=1.0, 4 games, 8 turns) |
+|---|---|---|
+| goldfish quality | 0.5057 | 0.5094 (+0.7%, bar was +10%) |
+| recovery@50 | 20.79 | 20.22 (floor 19.79 — held) |
+| structural composite | 0.7125 | 0.7161 |
+
+Dense potential-based credit with a non-circular signal still failed to
+move completion quality. Together with the structural-reward experiment
+(same day, rl-strategy-research.md §Results), the evidence now isolates
+**CQL's conservatism as the binding constraint**: the policy is anchored
+to human behavior tightly enough that reward engineering of any kind only
+reorders near-data actions. The champion remains the default; the Shaper
+stays in the codebase as an inert, tested capability.
+
+Promising next directions (each needs its own pre-committed bar):
+1. **Inference-time goldfish re-ranking** — rerank recommend's top-k by
+   goldfish delta at suggestion time. No training, no recovery risk, uses
+   Stage 1 directly; likely the best value-per-effort.
+2. Lower CQL alpha (relax conservatism) with shaping — riskier for
+   recovery, the natural follow-up experiment.
