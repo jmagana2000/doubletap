@@ -1,6 +1,7 @@
 # Gameplay Strategy Research → RL Model Refactor Plan
 
-Deep research into Magic: The Gathering deck-building theory, verified
+Deep research into Magic: The Gathering deck-building theory (expert
+registry: docs/experts.md), verified
 claim-by-claim, mapped against what the model currently learns, and turned
 into a phased refactor plan. Research method: 5-angle web search fan-out,
 23 sources fetched, 113 claims extracted, adversarial verification on the
