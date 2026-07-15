@@ -38,6 +38,34 @@ target (37%). Karsten's work says the target is a function of the deck's
 own curve and ramp density, and that color sufficiency (pips vs sources)
 is a second, independent constraint we currently don't reward at all.
 
+**Addendum (2026-07-15) — Karsten's Commander-specific simulations and an
+independent replication.** Karsten's "What's an Optimal Mana Curve and
+Land/Ramp Count for Commander" (TCGplayer) runs Monte Carlo goldfish
+simulations optimizing expected compounded mana spent. Key results:
+
+- Rule of thumb: **start at 42 lands + Sol Ring, cut one land per 2–3
+  additional mana rocks / 3–4 cantrips or dorks, never below ~37**
+- Optimal lists shift with commander cost: a 2-mana commander wants ~42
+  lands and nearly zero rocks; a 6-mana commander wants ~38 lands plus ~10
+  rocks — total mana sources is the invariant, not land count
+- Longer-game optima run **zero 1-drops, many more 6-drops, and 13–14
+  Signets** — curve shape is a function of expected game length
+
+ScrollVault independently replicated at scale (3.75M simulated games, 5
+archetypes × 15 land counts, London mulligan + free Commander mulligan
+modeled): **cEDH ~29–31 lands (12 fast-mana), combo 33–35 (10 rocks),
+midrange 36–37 (10 mixed), battlecruiser/landfall 38–40**. Their data
+validates the regression we shipped: for midrange (avg MV 3.0, 10 ramp)
+Karsten's formula predicts 38, simulation says 37–38, with diminishing
+returns past 37 (+1–3% cast rates for 3 more lands). It also quantifies
+the EDHREC-average-29-lands problem: at 29 lands a 6-drop lands on curve
+in only ~75% of games vs 90% at 37.
+
+**Future use:** the per-archetype land table is the natural next upgrade
+for `deck analyze` (archetype-aware land targets instead of one
+regression), and the goldfish-simulation methodology is exactly the
+non-circular reward proposed in §Results.
+
 ### B. EDHREC's lift metric — validates our reward core
 
 Verified directly against EDHREC's methodology article: their production
@@ -226,6 +254,8 @@ evidence wasn't.
 | C (eval + sweep + verdict) | ~1 session | A, B |
 
 Sources: Karsten/ChannelFireball colored-sources article; Karsten/TCGplayer
-land-count regression; TCGplayer Commander land analysis; EDHREC
-"From Synergy to Lift"; Command Zone template (two mirrors); Flores
-"Who's the Beatdown"; arXiv 1806.09771, 2105.11864, 2407.05879.
+land-count regression; Karsten/TCGplayer "What's an Optimal Mana Curve and
+Land/Ramp Count for Commander" (e22caad1); ScrollVault commander-land-count
+replication; EDHREC "From Synergy to Lift"; Command Zone template (two
+mirrors); Flores "Who's the Beatdown"; arXiv 1806.09771, 2105.11864,
+2407.05879.
