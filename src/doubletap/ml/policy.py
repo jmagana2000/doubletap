@@ -7,8 +7,17 @@ recommend/complete use at runtime."""
 
 import numpy as np
 
+from ..analysis import SOURCES_NEEDED
 from ..formats import FormatConfig
-from .data import CorpusDeck, Vocab, action_mask, state_features
+from .data import ROLE_ORDER, CorpusDeck, Vocab, action_mask, state_features
+
+_WINCON_IDXS = (ROLE_ORDER.index("wincon"), ROLE_ORDER.index("evasive"))
+_QUALITY_QUOTAS = (
+    (ROLE_ORDER.index("ramp"), 11),
+    (ROLE_ORDER.index("draw"), 10),
+    (ROLE_ORDER.index("removal"), 11),
+    (ROLE_ORDER.index("board_wipe"), 3),
+)
 
 
 def score_state(
@@ -84,6 +93,69 @@ def complete_deck(
         added.append(best)
         partial = np.append(partial, best)
     return added, partial
+
+
+def structural_quality(
+    model,
+    decks: list[CorpusDeck],
+    vocab: Vocab,
+    fmt: FormatConfig,
+    mask_frac: float = 0.5,
+    rng: np.random.Generator | None = None,
+    max_decks: int = 50,
+) -> dict:
+    """How well the model's greedy completions are *built*, not just how well
+    they imitate. Mask mask_frac of each holdout deck's nonland cards, run
+    complete_deck, and score the result on color sufficiency, role quotas,
+    and win-condition presence. Composite in [0, 1], higher is better
+    (weights fixed and documented in docs/rl-strategy-research.md)."""
+    rng = rng or np.random.default_rng(0)
+    needed_table = SOURCES_NEEDED.get(fmt.name, SOURCES_NEEDED["commander"])
+    color_pens, quota_pens, win_oks = [], [], []
+    for deck in decks[:max_decks]:
+        nonland = deck.nonland_positions
+        if nonland.size < 10:
+            continue
+        hidden = rng.choice(nonland, size=int(nonland.size * mask_frac), replace=False)
+        keep = np.ones(deck.main_idxs.size, dtype=bool)
+        keep[hidden] = False
+        partial = deck.main_idxs[keep]
+        _, final = complete_deck(
+            model, vocab, fmt, partial, deck.commander_idx, deck.partner_idx
+        )
+
+        max_pips = vocab.pips[final].max(axis=0)
+        eff_sources = vocab.src_w[final].sum(axis=0)
+        color_pen = 0.0
+        for c in range(5):
+            if max_pips[c] > 0:
+                needed = needed_table[min(int(max_pips[c]), 3)]
+                color_pen = max(
+                    color_pen, max(0.0, needed - float(eff_sources[c])) / needed
+                )
+        color_pens.append(color_pen)
+
+        role_counts = vocab.roles[final].sum(axis=0)
+        quota_pens.append(
+            float(
+                np.mean([max(0.0, q - role_counts[i]) / q for i, q in _QUALITY_QUOTAS])
+            )
+        )
+        win_oks.append(float(any(role_counts[i] > 0 for i in _WINCON_IDXS)))
+
+    if not color_pens:
+        return {"decks": 0, "composite": 0.0}
+    color = float(np.mean(color_pens))
+    quota = float(np.mean(quota_pens))
+    win = float(np.mean(win_oks))
+    composite = 1.0 - (0.5 * color + 0.4 * quota + 0.1 * (1.0 - win))
+    return {
+        "decks": len(color_pens),
+        "composite": round(composite, 4),
+        "color_shortfall": round(color, 4),
+        "quota_deficit": round(quota, 4),
+        "wincon_rate": round(win, 4),
+    }
 
 
 def recovery_at_k(

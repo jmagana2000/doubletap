@@ -107,7 +107,8 @@ def corpus_card_sets(decks: list[CorpusDeck]) -> list[np.ndarray]:
 
 def structure_reward(vocab: Vocab, fmt: FormatConfig, deck_idxs: np.ndarray) -> float:
     """Terminal structural score in [-1, 0]: distance of the land fraction from
-    the format target. (Color consistency is enforced by the action mask.)"""
+    the format target. (The Karsten/quota reward variant was tried 2026-07-15
+    and failed its keep-bar — see docs/rl-strategy-research.md §Results.)"""
     if deck_idxs.size == 0:
         return -1.0
     land_frac = vocab.land[deck_idxs].sum() / deck_idxs.size

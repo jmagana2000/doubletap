@@ -4,9 +4,27 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ..analysis import (
+    classify,
+    color_pip_counts,
+    effective_lands,
+    is_cheap_draw_ramp,
+    source_weights,
+)
 from ..formats import FormatConfig, allows_any_number, is_basic_land, is_land
 
 COLOR_ORDER = "WUBRG"
+# functional roles carried as model features and used by the quota reward
+ROLE_ORDER = (
+    "ramp",
+    "draw",
+    "removal",
+    "removal_instant",
+    "board_wipe",
+    "tutor",
+    "wincon",
+    "evasive",
+)
 TYPE_ORDER = [
     "Creature",
     "Instant",
@@ -58,6 +76,13 @@ class Vocab:
     land: np.ndarray  # (n,) bool
     basic: np.ndarray  # (n,) bool
     any_number: np.ndarray  # (n,) bool
+    # strategy arrays (docs/rl-strategy-research.md): functional roles,
+    # Karsten effective-land and fractional-source weights, colored pips
+    roles: np.ndarray  # (n, 8) bool, ROLE_ORDER
+    eff_land: np.ndarray  # (n,) float32 — lands 1.0, spell//land MDFCs 0.38/0.74
+    cheap_dr: np.ndarray  # (n,) bool — MV<=2 draw/ramp (Karsten regression term)
+    src_w: np.ndarray  # (n, 5) float32 — fractional colored sources, WUBRG
+    pips: np.ndarray  # (n, 5) int8 — colored pips in cost, WUBRG
 
     def __len__(self) -> int:
         return len(self.oracle_ids)
@@ -65,6 +90,7 @@ class Vocab:
 
 def build_vocab(conn: sqlite3.Connection, fmt: FormatConfig) -> Vocab:
     oracle_ids, feats, cmc, bits, land, basic, any_num = [], [], [], [], [], [], []
+    roles, eff_land, cheap_dr, src_w, pips = [], [], [], [], []
     for (raw,) in conn.execute("SELECT json FROM cards ORDER BY oracle_id"):
         card = json.loads(raw)
         if card["legalities"].get(fmt.legality_key) != "legal":
@@ -76,6 +102,14 @@ def build_vocab(conn: sqlite3.Connection, fmt: FormatConfig) -> Vocab:
         land.append(is_land(card))
         basic.append(is_basic_land(card))
         any_num.append(allows_any_number(card))
+        card_roles = classify(card)
+        roles.append([r in card_roles for r in ROLE_ORDER])
+        eff_land.append(effective_lands(card))
+        cheap_dr.append(is_cheap_draw_ramp(card))
+        weights = source_weights(card)
+        src_w.append([weights.get(c, 0.0) for c in COLOR_ORDER])
+        pip_counts = color_pip_counts(card)
+        pips.append([pip_counts.get(c, 0) for c in COLOR_ORDER])
     return Vocab(
         oracle_ids=oracle_ids,
         index={oid: i for i, oid in enumerate(oracle_ids)},
@@ -85,6 +119,11 @@ def build_vocab(conn: sqlite3.Connection, fmt: FormatConfig) -> Vocab:
         land=np.array(land, dtype=bool),
         basic=np.array(basic, dtype=bool),
         any_number=np.array(any_num, dtype=bool),
+        roles=np.array(roles, dtype=bool),
+        eff_land=np.array(eff_land, dtype=np.float32),
+        cheap_dr=np.array(cheap_dr, dtype=bool),
+        src_w=np.array(src_w, dtype=np.float32),
+        pips=np.array(pips, dtype=np.int8),
     )
 
 

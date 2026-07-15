@@ -57,18 +57,26 @@ def test_pmi_save_load_round_trip(tmp_path):
     assert loaded.pairs == pytest.approx(pmi.pairs)
 
 
-def _tiny_vocab(land_flags):
+def _tiny_vocab(land_flags, **over):
     n = len(land_flags)
-    return Vocab(
+    land = np.array(land_flags, dtype=bool)
+    fields = dict(
         oracle_ids=[f"id{i}" for i in range(n)],
         index={f"id{i}": i for i in range(n)},
         features=np.zeros((n, 1), dtype=np.float32),
         cmc=np.zeros(n, dtype=np.float32),
         identity_bits=np.zeros(n, dtype=np.uint8),
-        land=np.array(land_flags, dtype=bool),
-        basic=np.array(land_flags, dtype=bool),
+        land=land,
+        basic=land.copy(),
         any_number=np.zeros(n, dtype=bool),
+        roles=np.zeros((n, 8), dtype=bool),
+        eff_land=land.astype(np.float32),
+        cheap_dr=np.zeros(n, dtype=bool),
+        src_w=np.zeros((n, 5), dtype=np.float32),
+        pips=np.zeros((n, 5), dtype=np.int8),
     )
+    fields.update(over)
+    return Vocab(**fields)
 
 
 def test_structure_reward_peaks_at_land_target():

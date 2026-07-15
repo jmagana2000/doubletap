@@ -202,12 +202,17 @@ def deck_analysis(path: str) -> dict:
     for oid in (deck.commander, deck.partner, deck.companion):
         if oid:
             entries[oid] = entries.get(oid, 0) + 1
-    report = analysis.deck_report(conn, entries)
+    report = analysis.deck_report(conn, entries, deck.format)
     names = [formats.get_card(conn, oid)["name"] for oid in entries]
     bracket, game_changers = formats.compute_bracket(names)
     return {
         "roles": {r: sorted(cards) for r, cards in report.by_role.items()},
         "targets": analysis.COMMANDER_TARGETS if deck.format == "commander" else {},
+        "karsten_lands": report.karsten_lands,
+        "eff_lands": round(report.eff_lands, 1),
+        "cheap_draw_ramp": report.cheap_draw_ramp,
+        "eff_sources": {c: round(v, 1) for c, v in report.eff_sources.items()},
+        "max_pips": dict(report.max_pips),
         "curve": {str(mv): n for mv, n in sorted(report.curve.items())},
         "avg_mv": round(report.avg_mv, 2),
         "early_plays": report.early_plays,

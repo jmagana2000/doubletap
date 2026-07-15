@@ -145,3 +145,24 @@ def test_sample_batch_transitions_are_consistent(corpus_conn, vocab):
     again = sample_batch(decks, vocab, COMMANDER, 64, np.random.default_rng(7))
     assert np.array_equal(batch.action, again.action)
     assert np.array_equal(batch.bag, again.bag)
+
+
+def test_vocab_strategy_arrays(loaded_conn):
+    """The strategy arrays stay on Vocab for structural_quality and future
+    reward experiments, even though the failed 2026-07-15 feature/reward
+    variant was reverted (docs/rl-strategy-research.md §Results)."""
+    from doubletap.formats import COMMANDER
+    from doubletap.ml.data import ROLE_ORDER, build_vocab
+    from doubletap.names import lookup
+
+    vocab = build_vocab(loaded_conn, COMMANDER)
+
+    def idx(name):
+        return vocab.index[lookup(loaded_conn, name)[0].oracle_id]
+
+    assert vocab.roles[idx("Sol Ring"), ROLE_ORDER.index("ramp")]
+    assert not vocab.roles[idx("Relentless Rats"), ROLE_ORDER.index("ramp")]
+    assert vocab.cheap_dr[idx("Sol Ring")]
+    assert vocab.src_w[idx("Swamp"), 2] == 1.0  # B at land weight
+    assert vocab.pips[idx("Juzám Djinn"), 2] == 2  # {2}{B}{B}
+    assert vocab.eff_land[idx("Swamp")] == 1.0

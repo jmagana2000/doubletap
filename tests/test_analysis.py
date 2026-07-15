@@ -162,8 +162,9 @@ def test_deck_report_curve_and_colors(loaded_conn):
     assert abs(report.avg_mv - (4 * 1 + 2 * 4) / 6) < 1e-9
     assert report.pips == {"R": 4, "B": 4}
     assert report.sources == {"B": 20}
-    # half the pips are red but no land makes red
-    assert short_colors(report) == ["R"]
+    # Karsten: Bolt's single R pip needs 19 sources (have 0) and Juzám's
+    # double B pip needs 30 (have 20) — both colors are honestly short
+    assert short_colors(report) == ["B", "R"]
 
 
 def test_short_colors_empty_when_balanced():
@@ -177,3 +178,80 @@ def test_short_colors_empty_when_balanced():
     assert short_colors(balanced) == []
     no_lands = DeckReport(pips=Counter({"B": 10}))
     assert short_colors(no_lands) == []
+
+
+# --- Karsten mana-base math (docs/rl-strategy-research.md) -------------------
+
+
+def test_karsten_land_target():
+    from doubletap.analysis import karsten_land_target
+
+    # commander regression: 31.42 + 3.13*avgMV - 0.28*cheap
+    assert karsten_land_target(3.0, 10, "commander") == 38
+    assert karsten_land_target(2.0, 15, "commander") == 34  # clamped floor
+    assert karsten_land_target(5.0, 0, "commander") == 45  # clamped ceiling
+    # 60-card regression: 19.59 + 1.90*avgMV - 0.28*cheap
+    assert karsten_land_target(3.0, 4, "modern") == 24
+
+
+def test_effective_lands_and_mdfc_fractions():
+    from doubletap.analysis import effective_lands
+
+    swamp = {"type_line": "Basic Land — Swamp"}
+    assert effective_lands(swamp) == 1.0
+    mdfc = {"type_line": "Instant // Land", "rarity": "rare"}
+    assert effective_lands(mdfc) == 0.38
+    mythic_mdfc = {"type_line": "Sorcery // Land", "rarity": "mythic"}
+    assert effective_lands(mythic_mdfc) == 0.74
+    spell = {"type_line": "Instant"}
+    assert effective_lands(spell) == 0.0
+    # front-face land MDFCs are just lands
+    front_land = {"type_line": "Land // Instant", "rarity": "mythic"}
+    assert effective_lands(front_land) == 1.0
+
+
+def test_source_weights_by_producer_type():
+    from doubletap.analysis import source_weights
+
+    land = {"type_line": "Land", "produced_mana": ["W", "U"]}
+    assert source_weights(land) == {"W": 1.0, "U": 1.0}
+    dork = {"type_line": "Creature — Elf Druid", "produced_mana": ["G"]}
+    assert source_weights(dork) == {"G": 0.5}
+    rock = {"type_line": "Artifact", "produced_mana": ["B", "G", "R", "U", "W"]}
+    assert source_weights(rock)["W"] == 0.75
+    colorless_rock = {"type_line": "Artifact", "produced_mana": ["C"]}
+    assert source_weights(colorless_rock) == {}  # colorless isn't a colored source
+    nothing = {"type_line": "Instant"}
+    assert source_weights(nothing) == {}
+
+
+def test_is_cheap_draw_ramp():
+    from doubletap.analysis import is_cheap_draw_ramp
+
+    sol_ring = {"type_line": "Artifact", "cmc": 1, "oracle_text": "{T}: Add {C}{C}."}
+    assert is_cheap_draw_ramp(sol_ring)
+    cantrip = {"type_line": "Instant", "cmc": 1, "oracle_text": "Draw a card."}
+    assert is_cheap_draw_ramp(cantrip)
+    big_draw = {"type_line": "Sorcery", "cmc": 4, "oracle_text": "Draw three cards."}
+    assert not is_cheap_draw_ramp(big_draw)  # not cheap
+    bolt = {
+        "type_line": "Instant",
+        "cmc": 1,
+        "oracle_text": "Deals 3 damage to any target.",
+    }
+    assert not is_cheap_draw_ramp(bolt)  # neither draw nor ramp
+
+
+def test_deck_report_karsten_fields(loaded_conn):
+    def oid(name):
+        return lookup(loaded_conn, name)[0].oracle_id
+
+    # Juzám {2}{B}{B} = double black pip -> needs 30 B sources in commander;
+    # 20 swamps fall short. Bolt needs 19 R sources; zero -> short.
+    entries = {oid("Lightning Bolt"): 4, oid("Juzám Djinn"): 2, oid("Swamp"): 20}
+    report = deck_report(loaded_conn, entries, "commander")
+    assert report.eff_lands == 20.0
+    assert report.max_pips == {"R": 1, "B": 2}
+    assert report.eff_sources == {"B": 20.0}
+    assert short_colors(report) == ["B", "R"]
+    assert report.karsten_lands == 38  # avgMV 2.0, 4 cheap (bolt isn't) -> clamp

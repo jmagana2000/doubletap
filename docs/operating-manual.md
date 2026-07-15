@@ -307,9 +307,9 @@ for further training) and `<algo>_<format>.npz` (plain numpy weights).
 `recommend`/`complete` prefer the `.npz` and run torch-free — the numpy
 scorer is bit-for-bit equivalent to the torch model (pinned by a test).
 
-**`train bc`** — trains the behavior-cloning baseline (the default model for
-suggestions). Refuses to run on fewer than 20 parsed decks. Writes
-`models/bc_<format>.pt` + `.npz`.
+**`train bc`** — trains the behavior-cloning baseline (the fallback model,
+and the initialization for CQL). Refuses to run on fewer than 20 parsed
+decks. Writes `models/bc_<format>.pt` + `.npz`.
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -317,8 +317,9 @@ suggestions). Refuses to run on fewer than 20 parsed decks. Writes
 | `--steps` | 1500 | Training steps; more = longer training, usually better up to a point |
 | `--seed` | 0 | Random seed, for reproducible training runs |
 
-**`train cql`** — trains the CQL variant (an experimental alternative);
-requires the PMI table first. Writes `models/cql_<format>.pt`.
+**`train cql`** — trains the CQL model (the default for suggestions since
+it cleared the keep-bar; see the explainer above); requires the PMI table
+first. Writes `models/cql_<format>.pt` + `.npz`.
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -333,8 +334,11 @@ requires the PMI table first. Writes `models/cql_<format>.pt`.
 training runs write both automatically). No parameters.
 
 **`eval`** — held-out recovery@k: hides cards from unseen decks and measures
-how many the model ranks highly. Higher is better. Use it to compare a BC
-and a CQL checkpoint on equal terms.
+how many the model ranks highly. Higher is better. Also reports a
+**structural quality** composite: half of each holdout deck is masked, the
+model completes it greedily, and the completion is scored on color
+sufficiency, role quotas, and win-condition presence. Use both numbers to
+compare a BC and a CQL checkpoint on equal terms.
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -405,8 +409,15 @@ caffeinate -is doubletap corpus crawl -f commander --max 20000
 doubletap corpus stats
 doubletap corpus pmi -f commander
 doubletap train bc -f commander
+doubletap train cql -f commander
 doubletap eval --model ~/.doubletap/models/bc_commander.pt
+doubletap eval --model ~/.doubletap/models/cql_commander.pt
 ```
+
+`recommend` automatically prefers the CQL checkpoint when both exist,
+falling back to BC. Compare the two `eval` outputs yourself — if BC wins
+recovery@50 by more than the keep-bar margin on your corpus, pass
+`--model ~/.doubletap/models/bc_<format>.npz` explicitly.
 
 ---
 
@@ -417,7 +428,7 @@ doubletap eval --model ~/.doubletap/models/bc_commander.pt
 | Refresh card database | New set releases; a name won't resolve | `doubletap cards sync` |
 | Refresh **prices** | Before budget decisions (prices are frozen at last sync) | `doubletap cards sync --force` |
 | Grow the corpus | Occasionally; after set releases | Re-run `corpus crawl` — it resumes, never re-fetches |
-| Retrain models | After meaningful corpus growth or a card-db refresh | `corpus pmi` then `train bc` (order matters for CQL) |
+| Retrain models | After meaningful corpus growth or a card-db refresh | `corpus pmi`, then `train bc`, then `train cql` (that order — CQL needs both) |
 | Back up | Anytime | Copy `~/.doubletap/decks/` (tiny, irreplaceable). The card db and models are rebuildable; `corpus/raw/` shards avoid a re-crawl |
 | Reset completely | Corruption, fresh start | Delete `~/.doubletap/` — decks included, so back those up first |
 | Run the test suite | After pulling changes | `.venv/bin/pytest` (no network needed) |

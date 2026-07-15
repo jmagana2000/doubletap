@@ -263,3 +263,16 @@ def test_checkpoint_round_trip_and_vocab_guard(rigged_conn, tmp_path):
     other.oracle_ids = list(reversed(vocab.oracle_ids))
     with pytest.raises(ValueError):
         load_checkpoint(path, other)
+
+
+def test_structural_quality_scores_completions(rigged_conn):
+    from doubletap.ml.policy import structural_quality
+
+    vocab = build_vocab(rigged_conn, COMMANDER)
+    decks = load_corpus(rigged_conn, vocab, COMMANDER)
+    model = tiny_model(vocab)
+    q = structural_quality(model, decks, vocab, COMMANDER, max_decks=3)
+    assert q["decks"] == 3
+    assert 0.0 <= q["composite"] <= 1.0
+    # fixture pool has ramp (Sol Ring) but no wipes: quota deficit nonzero
+    assert q["quota_deficit"] > 0.0

@@ -138,6 +138,11 @@ def load_checkpoint(path: Path, vocab: Vocab) -> tuple[TwoTowerQ, dict]:
             f"{path} was trained on a different card vocab; re-train after cards sync"
         )
     model = TwoTowerQ(vocab.features)
-    model.load_state_dict(ckpt["state_dict"])
+    try:
+        model.load_state_dict(ckpt["state_dict"])
+    except RuntimeError as e:
+        raise ValueError(
+            f"{path} was trained with an older feature set; re-run doubletap train"
+        ) from e
     model.eval()
     return model, ckpt

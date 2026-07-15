@@ -81,4 +81,10 @@ def load_np_checkpoint(path: Path, vocab: Vocab) -> tuple[NpTwoTowerQ, dict]:
             f"{path} was trained on a different card vocab; re-train after cards sync"
         )
     weights = {k: data[k] for k in data.files if k != "__meta__"}
+    emb_dim = weights["card_emb.weight"].shape[1]
+    expected_action_in = emb_dim + vocab.features.shape[1]
+    if weights["action_tower.0.weight"].shape[1] != expected_action_in:
+        raise ValueError(
+            f"{path} was trained with an older feature set; re-run doubletap train"
+        )
     return NpTwoTowerQ(weights, vocab.features), meta

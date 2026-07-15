@@ -457,10 +457,13 @@ doubletap corpus pmi --format commander
 
 ```bash
 doubletap train bc --format commander
+doubletap train cql --format commander
 ```
 
-This takes 10–30 minutes depending on corpus size. When it finishes, the model
-is saved to `~/.doubletap/models/` and `recommend` will use it automatically.
+The first command trains the baseline model; the second trains the
+reinforcement-learning model that `recommend` prefers when available (each
+takes a few minutes to half an hour depending on corpus size). Both are
+saved to `~/.doubletap/models/` and picked up automatically.
 
 ### Evaluating model quality
 

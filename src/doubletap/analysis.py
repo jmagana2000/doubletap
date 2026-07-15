@@ -137,6 +137,99 @@ def classify(card: dict) -> set[str]:
     return roles
 
 
+# --- Karsten mana-base mathematics ---------------------------------------------
+# Sources: Frank Karsten's hypergeometric research (ChannelFireball colored-
+# sources tables; TCGplayer land-count regression). Verified claims and full
+# citations in docs/rl-strategy-research.md.
+
+# colored sources needed for a card with N pips of one color to be
+# "consistently castable" ((89+MV)% on curve)
+SOURCES_NEEDED = {
+    "commander": {1: 19, 2: 30, 3: 36},
+    "modern": {1: 14, 2: 21, 3: 23},
+}
+
+
+def karsten_land_target(avg_mv: float, cheap_draw_ramp: int, fmt_name: str) -> int:
+    """Optimal land count as a function of the deck's own curve and its cheap
+    (MV<=2) draw/ramp density — Karsten's fitted regressions, clamped to sane
+    format ranges."""
+    if fmt_name == "commander":
+        raw = 31.42 + 3.13 * avg_mv - 0.28 * cheap_draw_ramp
+        lo, hi = 34, 45
+    else:
+        raw = 19.59 + 1.90 * avg_mv - 0.28 * cheap_draw_ramp
+        lo, hi = 18, 28
+    return int(min(max(round(raw), lo), hi))
+
+
+def _is_mdfc_land(card: dict) -> tuple[bool, bool]:
+    """(is a spell//land MDFC, is mythic). Front-face lands count as real
+    lands elsewhere; this catches the spell-front variants only."""
+    tl = card.get("type_line", "")
+    if "//" not in tl or "Land" not in tl:
+        return False, False
+    if _is_land(card):  # front face is the land — treated as a land proper
+        return False, False
+    return True, card.get("rarity") == "mythic"
+
+
+def effective_lands(card: dict) -> float:
+    """How much 'land' a card is for land-count purposes: real lands 1.0,
+    spell//land MDFCs 0.38 (0.74 mythic), everything else 0."""
+    if _is_land(card):
+        return 1.0
+    mdfc, mythic = _is_mdfc_land(card)
+    if mdfc:
+        return 0.74 if mythic else 0.38
+    return 0.0
+
+
+def source_weights(card: dict) -> dict[str, float]:
+    """Fractional colored-source contribution per color (Karsten weights):
+    lands 1.0, mana creatures 0.5, mana artifacts 0.75, other producers 0.5,
+    spell//land MDFCs 0.8 (1.0 mythic)."""
+    produced = [c for c in (card.get("produced_mana") or []) if c in "WUBRG"]
+    if not produced:
+        return {}
+    if _is_land(card):
+        weight = 1.0
+    else:
+        mdfc, mythic = _is_mdfc_land(card)
+        if mdfc:
+            weight = 1.0 if mythic else 0.8
+        elif "Creature" in card.get("type_line", ""):
+            weight = 0.5
+        elif "Artifact" in card.get("type_line", ""):
+            weight = 0.75
+        else:
+            weight = 0.5
+    return {c: weight for c in produced}
+
+
+def color_pip_counts(card: dict) -> dict[str, int]:
+    """Colored pips per color in the card's mana cost (hybrid counts toward
+    each half is overkill — count the first color of a hybrid symbol)."""
+    pips: dict[str, int] = {}
+    for symbol in re.findall(r"\{([^}]+)\}", _mana_cost(card)):
+        for c in "WUBRG":
+            if c in symbol:
+                pips[c] = pips.get(c, 0) + 1
+                break
+    return pips
+
+
+def is_cheap_draw_ramp(card: dict) -> bool:
+    """Karsten's 'cheap card draw or mana ramp' regression term: MV<=2 cards
+    that draw or make mana."""
+    if _is_land(card):
+        return False
+    if (card.get("cmc") or 0) > 2:
+        return False
+    roles = classify(card)
+    return "ramp" in roles or "draw" in roles
+
+
 # --- Curve and color balance ---------------------------------------------------
 
 CURVE_TOP_BUCKET = 7  # mana values 7+ share one histogram bucket
@@ -144,6 +237,7 @@ CURVE_TOP_BUCKET = 7  # mana values 7+ share one histogram bucket
 
 @dataclass
 class DeckReport:
+    fmt_name: str = "commander"
     by_role: dict[str, list[tuple[str, int]]] = field(default_factory=dict)
     total_price: float = 0.0
     unpriced: int = 0
@@ -152,12 +246,19 @@ class DeckReport:
     early_plays: int = 0  # nonland cards with mv <= 2
     pips: Counter = field(default_factory=Counter)  # color -> symbols in costs
     sources: Counter = field(default_factory=Counter)  # color -> lands making it
+    eff_lands: float = 0.0  # lands + fractional MDFC credit
+    cheap_draw_ramp: int = 0  # MV<=2 draw/ramp (Karsten regression term)
+    karsten_lands: int = 0  # regression-recommended land count
+    eff_sources: dict = field(default_factory=dict)  # color -> fractional sources
+    max_pips: dict = field(default_factory=dict)  # color -> most pips on one card
 
 
-def deck_report(conn: sqlite3.Connection, entries: dict[str, int]) -> DeckReport:
+def deck_report(
+    conn: sqlite3.Connection, entries: dict[str, int], fmt_name: str = "commander"
+) -> DeckReport:
     """Full structural report for a deck (oracle_id -> qty): roles, price,
-    mana curve, and colored-cost vs land-color balance."""
-    report = DeckReport()
+    mana curve, Karsten land target, and colored-cost vs source balance."""
+    report = DeckReport(fmt_name=fmt_name)
     total_nonland = 0
     total_mv = 0.0
     for oid, qty in entries.items():
@@ -177,6 +278,12 @@ def deck_report(conn: sqlite3.Connection, entries: dict[str, int]) -> DeckReport
         else:
             report.total_price += price * qty
 
+        report.eff_lands += effective_lands(card) * qty
+        if is_cheap_draw_ramp(card):
+            report.cheap_draw_ramp += qty
+        for color, w in source_weights(card).items():
+            report.eff_sources[color] = report.eff_sources.get(color, 0.0) + w * qty
+
         if _is_land(card):
             for color in card.get("produced_mana") or []:
                 if color in "WUBRG":
@@ -188,29 +295,28 @@ def deck_report(conn: sqlite3.Connection, entries: dict[str, int]) -> DeckReport
             total_mv += mv * qty
             if mv <= 2:
                 report.early_plays += qty
-            for symbol in re.findall(r"\{([^}]+)\}", _mana_cost(card)):
-                for color in "WUBRG":
-                    if color in symbol:
-                        report.pips[color] += qty
+            for color, n in color_pip_counts(card).items():
+                report.pips[color] += n * qty
+                report.max_pips[color] = max(report.max_pips.get(color, 0), n)
     if total_nonland:
         report.avg_mv = total_mv / total_nonland
+    report.karsten_lands = karsten_land_target(
+        report.avg_mv, report.cheap_draw_ramp, fmt_name
+    )
     return report
 
 
 def short_colors(report: DeckReport) -> list[str]:
-    """Colors whose share of land sources falls well below their share of
-    mana symbols — hands with those spells won't be castable on time."""
-    pip_total = sum(report.pips.values())
-    source_total = sum(report.sources.values())
-    if not pip_total or not source_total:
-        return []
+    """Colors whose fractional sources fall short of Karsten's requirement
+    for the deck's most pip-demanding card of that color — those spells
+    won't be reliably castable on curve."""
+    needed_table = SOURCES_NEEDED.get(report.fmt_name, SOURCES_NEEDED["commander"])
     short = []
-    for color, n in report.pips.items():
-        need = n / pip_total
-        have = report.sources.get(color, 0) / source_total
-        if need > 0.1 and have < need * 0.6:
+    for color, pips in report.max_pips.items():
+        needed = needed_table[min(pips, 3)]
+        if report.eff_sources.get(color, 0.0) < needed:
             short.append(color)
-    return short
+    return [c for c in "WUBRG" if c in short]
 
 
 def analyze_deck(

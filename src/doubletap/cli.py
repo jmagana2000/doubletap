@@ -540,7 +540,7 @@ def eval_cmd(
     import torch
 
     from .ml.data import build_vocab, load_corpus
-    from .ml.eval import recovery_at_k
+    from .ml.eval import recovery_at_k, structural_quality
     from .ml.model import load_checkpoint
     from .ml.train_bc import split_corpus
 
@@ -554,6 +554,10 @@ def eval_cmd(
         model, holdout, vocab, fmt, n_hide=n_hide, rng=np.random.default_rng(seed)
     )
     typer.echo(f"{ckpt['algo']} {fmt.name}: {metrics}")
+    quality = structural_quality(
+        model, holdout, vocab, fmt, rng=np.random.default_rng(seed)
+    )
+    typer.echo(f"structural quality: {quality}")
 
 
 def _load_model(conn, fmt, model_path: Path | None):
@@ -920,7 +924,7 @@ def deck_analyze(path: Path = typer.Argument(..., exists=True, readable=True)):
     curve, color balance, interaction speed, win conditions, market price."""
     conn = db.connect()
     deck = decks.Deck.load(path)
-    report = analysis.deck_report(conn, _all_entries(deck))
+    report = analysis.deck_report(conn, _all_entries(deck), deck.format)
     by_role = report.by_role
 
     def count(role):
@@ -938,12 +942,17 @@ def deck_analyze(path: Path = typer.Argument(..., exists=True, readable=True)):
     ]
     for role, label, target_key in labels:
         n = count(role)
-        target = (
-            analysis.COMMANDER_TARGETS.get(target_key)
-            if target_key and deck.format == "commander"
-            else None
-        )
-        target_str = f"   (target ~{target})" if target else ""
+        if role == "land":
+            # Karsten regression: the land target follows the deck's own
+            # curve and cheap draw/ramp density, not a flat number
+            target_str = f"   (recommended ~{report.karsten_lands})"
+        else:
+            target = (
+                analysis.COMMANDER_TARGETS.get(target_key)
+                if target_key and deck.format == "commander"
+                else None
+            )
+            target_str = f"   (target ~{target})" if target else ""
         typer.echo(f"  {label:<20} {n:>3}{target_str}")
 
     n_removal, n_instant = count("removal"), count("removal_instant")
@@ -963,6 +972,11 @@ def deck_analyze(path: Path = typer.Argument(..., exists=True, readable=True)):
         typer.echo(
             f"  average {report.avg_mv:.1f}; cards costing 2 or less"
             f" (your turn-1/2 plays): {report.early_plays}"
+        )
+        typer.echo(
+            f"  recommended lands for this curve: ~{report.karsten_lands}"
+            f" (avg mana value {report.avg_mv:.1f},"
+            f" {report.cheap_draw_ramp} cheap draw/ramp) — Karsten regression"
         )
 
     if report.pips and report.sources:

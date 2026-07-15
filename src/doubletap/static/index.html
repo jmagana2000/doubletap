@@ -939,7 +939,7 @@ async function renderAnalytics(path) {
     buckets.map((n, i) => `<div class="col"><span class="cnt">${n || ""}</span>
       <div class="bar" style="height:${Math.max(2, n/mx*82)}%"></div>
       <span class="lbl">${i === 7 ? "7+" : i}</span></div>`).join("") +
-    `</div><p class="hint">average ${a.avg_mv} · ${a.early_plays} early plays (mana value ≤ 2)</p></div>`;
+    `</div><p class="hint">average ${a.avg_mv} · ${a.early_plays} early plays (mana value ≤ 2)${a.karsten_lands ? ` · recommended lands for this curve: ~${a.karsten_lands}` : ""}</p></div>`;
 
   // color balance: pips in costs vs land sources
   const pipTotal = Object.values(a.pips).reduce((s,n) => s+n, 0) || 1;
@@ -979,7 +979,7 @@ async function renderAnalytics(path) {
   const rolesHtml = `<div class="card"><h3>Roles vs targets</h3>` +
     roleLabels.map(([key, lbl, tkey]) => {
       const n = (a.roles[key] || []).reduce((s, [,q]) => s+q, 0);
-      const target = tkey ? a.targets[tkey] : null;
+      const target = tkey === "lands" && a.karsten_lands ? a.karsten_lands : (tkey ? a.targets[tkey] : null);
       const pct = target ? Math.min(100, n/target*100) : (n ? 100 : 0);
       return `<div class="bar-row"><span class="lb">${lbl}</span>
         <div class="tr"><div class="fl ${target && n < target ? "short" : ""}" style="width:${Math.round(pct)}%"></div></div>
