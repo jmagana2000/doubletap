@@ -77,9 +77,15 @@ def cards_lookup(name: str):
         typer.echo("No match found. Is the cache synced? (doubletap cards sync)")
         raise typer.Exit(code=1)
     for m in matches:
+        weights = analysis.source_weights(formats.get_card(conn, m.oracle_id))
+        src = (
+            "  sources " + " ".join(f"{c}:{w:g}" for c, w in weights.items())
+            if weights
+            else ""
+        )
         typer.echo(
             f"{m.score:5.1f}  {m.name}  [{_identity_label(conn, m.oracle_id)}]"
-            f"  ({m.oracle_id})"
+            f"  ({m.oracle_id}){src}"
         )
 
 

@@ -112,6 +112,8 @@ def _card_view(card: dict) -> dict:
         text = "\n—\n".join(
             f.get("oracle_text", "") for f in card.get("card_faces", [])
         )
+    from .analysis import source_weights
+
     return {
         "oracle_id": card["oracle_id"],
         "name": card["name"],
@@ -123,6 +125,7 @@ def _card_view(card: dict) -> dict:
         "art": images.get("art_crop", ""),
         "image": images.get("normal", ""),
         "price": card_price(card),
+        "sources": source_weights(card),  # Karsten fractional colored sources
     }
 
 

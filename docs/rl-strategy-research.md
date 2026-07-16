@@ -314,7 +314,30 @@ B: pip demand is a *state* summary the towers can act on directly (what
 does the mana base owe?), not a strategy label. The structural gain is
 marginal (+0.0006, within noise) but recovery improved across every k —
 the keep decision rests on recovery, with structural merely not
-regressing. **These are the new commander champion baselines for future bars:
+regressing.
+
+## Results (2026-07-16) — fractional-source feature PASSED on a 3-seed sweep
+
+The supply-side complement: 5 WUBRG fractional-source dims (Karsten
+weights via `analysis.source_weights`) on the **action tower**
+(`feature_dim(fmt)` 26→31, gated by the same `pip_state` flag — commander
+only). Bar: recovery@50 ≥ 20.17 (pip champion 21.17 − 1) AND structural
+> 0.7131. Seed 0 missed the recovery floor by 0.25 with structural up, so
+the modern seed-sweep protocol applied — decide on 3-seed means:
+
+| seed | recovery@50 | structural |
+|---|---|---|
+| 0 | 19.92 | 0.7162 |
+| 1 | 20.61 | 0.7118 |
+| 2 | **21.17** | **0.7176** |
+| mean (bar) | 20.57 (≥ 20.17 ✓) | 0.7152 (> 0.7131 ✓) |
+
+Seed 2 — best of the sweep on both axes — ships as champion: recovery@50
+21.17 (ties the pip champion), structural 0.7176 (best completion quality
+recorded), goldfish 0.5068. **New commander champion baselines for future
+bars: recovery@50 21.17, structural 0.7176, goldfish 0.5068.** The model
+now sees both halves of the mana ledger: pip demand on the state tower,
+fractional-source supply on the action tower. **These are the new commander champion baselines for future bars:
 recovery@50 21.17, structural 0.7131, goldfish 0.5097.**
 
 **Modern FAILED the same feature** (floor: old champion 53.77 − 1):

@@ -543,6 +543,7 @@ Deck
       <h2 id="modal-name"></h2>
       <div class="tl"><span id="modal-cost"></span> · <span id="modal-type"></span></div>
       <div id="modal-price"></div>
+      <div id="modal-sources" class="hint"></div>
       <div class="otext" id="modal-text"></div>
       <div class="mrow" id="modal-actions"></div>
     </div>
@@ -785,6 +786,10 @@ function openModal(c) {
   $("modal-cost").innerHTML = manaPips(c.mana_cost) || "—";
   $("modal-type").textContent = c.type_line;
   $("modal-price").textContent = c.price != null ? `$${c.price.toFixed(2)} market` : "";
+  const src = c.sources && Object.keys(c.sources).length
+    ? "Mana source (Karsten): " + Object.entries(c.sources).map(([k,v]) => `${k} ${v}`).join(" · ")
+    : "";
+  $("modal-sources").textContent = src;
   $("modal-text").textContent = c.oracle_text || "(no rules text)";
   const inDeck = state.deck && state.deck.cards.find(x => x.name === c.name);
   $("modal-actions").innerHTML = state.deck ? `

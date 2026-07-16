@@ -188,10 +188,11 @@ doubletap deck commander ~/.doubletap/decks/my-deck.json
 
 **See every card in a deck:**
 ```bash
-doubletap deck show ~/.doubletap/decks/my-deck.json
+doubletap deck show my-deck
 ```
 Prints the commander, partner, and companion (when set), then each card with
-its quantity, mana cost, and type, alphabetically.
+its quantity, mana cost, and type, alphabetically. A bare name looks in
+`~/.doubletap/decks/`; an explicit path works too, `.json` optional.
 
 **List all saved decks:**
 ```bash
@@ -318,6 +319,14 @@ lands, cast what the mana allows — and reports how it *functions*: how much
 of your mana you actually use, how often you curve out, how often you sit
 on dead turns, and whether your commander comes down on time. The
 simulation's math is calibrated against Frank Karsten's published research.
+
+A deck without lands can't goldfish, but `complete --goldfish` will finish
+a partial deck with the model and simulate it with a basic mana base split
+to match the deck's colored pips:
+
+```bash
+doubletap complete --deck my-deck.json --goldfish
+```
 
 ### What your deck costs — and building on a budget
 

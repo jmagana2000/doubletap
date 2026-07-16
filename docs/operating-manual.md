@@ -121,7 +121,10 @@ download when Scryfall's data hasn't changed.
 
 **`cards lookup NAME`** — resolves a card name (typo-tolerant,
 accent-insensitive, face-aware). Prints score (string-match confidence,
-0–100), name, color identity, and oracle_id per candidate. Exits 1 if
+0–100), name, color identity, oracle_id, and — for mana producers — the
+card's fractional colored-source weights (Karsten: lands 1.0, mana
+artifacts 0.75, mana creatures 0.5 per produced color, e.g. Arcane
+Signet shows `sources B:0.75 G:0.75 R:0.75 U:0.75 W:0.75`). Exits 1 if
 nothing matches.
 
 | Parameter | Default | Description |
@@ -155,12 +158,12 @@ Imports never guess silently: ambiguous/unmatched lines abort the import
 card count, commander (or contents for small commander-less files). No
 parameters.
 
-**`deck show PATH`** — every card in one deck: commander/partner/companion
+**`deck show NAME`** — every card in one deck: commander/partner/companion
 slots, then quantity, name, mana cost, and type line per card, alphabetical.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `PATH` | required | The deck JSON file to display |
+| `NAME` | required | A saved deck name (`deck show my-deck` finds `~/.doubletap/decks/my-deck.json`) or an explicit file path; the `.json` extension is optional either way |
 
 **`deck add PATH NAME`** — add a card. Warns on rule violations the add
 causes (copy limit, color identity) but saves anyway. Exit 1 on unresolved
@@ -310,7 +313,12 @@ They differ in what the network is taught:
   reward is a statistic of the same corpus BC imitates, so the margin was
   never going to be huge — the keep-bar exists to stop the fancier model
   from shipping on vibes, and equally to promote it the moment the
-  evidence is real.
+  evidence is real. *(Update 2026-07-16: the commander champion now also
+  carries mana-math features — pip demand on the state side, Karsten
+  fractional sources on the card side — recovery@50 21.17 with the best
+  completion quality recorded (structural 0.7176); modern rejected
+  mana-math features in a 3-seed sweep and keeps its original champion.
+  Full history: docs/rl-strategy-research.md §Results.)*
 
 Training order: `corpus crawl` → `corpus pmi` → `train bc` → (optionally)
 `train cql`, which initializes from the BC checkpoint.
@@ -383,6 +391,7 @@ each add) and tells you how many lands remain to add.
 | `--model` | auto | Checkpoint to use; same default chain as `recommend` |
 | `--max-card-price` | none | Per-card USD budget cap on added cards |
 | `--bracket` | 3 | Target Commander Bracket for the result: 1–2 add no Game Changers, 3 caps the deck at three total (counting existing ones), 4–5 unrestricted. Ignored for Modern |
+| `--goldfish` | off | After completing, goldfish the result with the land gap filled by basics split proportionally to the deck's colored pips (simulation only — the saved deck still leaves the mana base to you) |
 
 Lands are never suggested by design — add them yourself using the gap report
 and the color-balance section of `deck analyze`.

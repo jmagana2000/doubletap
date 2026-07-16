@@ -36,8 +36,14 @@ TYPE_ORDER = [
     "Battle",
 ]
 RARITY_ORDER = ["common", "uncommon", "rare", "mythic"]
-FEATURE_DIM = 1 + len(TYPE_ORDER) + 5 + 5 + 1 + len(RARITY_ORDER) + 1 + 1  # 26
+BASE_FEATURE_DIM = 1 + len(TYPE_ORDER) + 5 + 5 + 1 + len(RARITY_ORDER) + 1 + 1  # 26
 BASE_STATE_DIM = 9 + 1 + 1 + 5  # curve histogram, land fraction, progress, identity
+
+
+def feature_dim(fmt: FormatConfig) -> int:
+    """Card-feature width; +5 WUBRG fractional-source dims (Karsten weights)
+    where the format's keep-bar accepted mana-math features."""
+    return BASE_FEATURE_DIM + (5 if fmt.pip_state else 0)
 
 
 def state_dim(fmt: FormatConfig) -> int:
@@ -51,8 +57,8 @@ def _identity_bits(color_identity: list[str]) -> int:
     return sum(1 << COLOR_ORDER.index(c) for c in color_identity)
 
 
-def card_features(card: dict) -> np.ndarray:
-    feats = np.zeros(FEATURE_DIM, dtype=np.float32)
+def card_features(card: dict, fmt: FormatConfig) -> np.ndarray:
+    feats = np.zeros(feature_dim(fmt), dtype=np.float32)
     feats[0] = min(float(card.get("cmc", 0.0)), 8.0) / 8.0
     type_line = card["type_line"]
     for i, t in enumerate(TYPE_ORDER):
@@ -67,6 +73,9 @@ def card_features(card: dict) -> np.ndarray:
     rank = card.get("edhrec_rank")
     feats[24] = 1.0 - min(np.log1p(rank) / np.log1p(50_000), 1.0) if rank else 0.0
     feats[25] = float(is_basic_land(card))
+    if fmt.pip_state:
+        weights = source_weights(card)
+        feats[26:31] = [weights.get(c, 0.0) for c in COLOR_ORDER]
     return feats
 
 
@@ -77,7 +86,7 @@ class Vocab:
 
     oracle_ids: list[str]
     index: dict[str, int]
-    features: np.ndarray  # (n, FEATURE_DIM) float32
+    features: np.ndarray  # (n, feature_dim(fmt)) float32
     cmc: np.ndarray  # (n,) float32
     identity_bits: np.ndarray  # (n,) uint8, WUBRG bitmask
     land: np.ndarray  # (n,) bool
@@ -103,7 +112,7 @@ def build_vocab(conn: sqlite3.Connection, fmt: FormatConfig) -> Vocab:
         if card["legalities"].get(fmt.legality_key) != "legal":
             continue
         oracle_ids.append(card["oracle_id"])
-        feats.append(card_features(card))
+        feats.append(card_features(card, fmt))
         cmc.append(min(float(card.get("cmc", 0.0)), 8.0))
         bits.append(_identity_bits(card.get("color_identity") or []))
         land.append(is_land(card))

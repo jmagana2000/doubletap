@@ -3,7 +3,7 @@ import pytest
 
 from doubletap.formats import COMMANDER, MODERN
 from doubletap.ml.data import (
-    FEATURE_DIM,
+    feature_dim,
     state_dim,
     action_mask,
     build_vocab,
@@ -32,7 +32,7 @@ def test_vocab_covers_commander_legal_cards_only(loaded_conn, vocab):
         names.add(name)
     assert "Sol Ring" in names
     assert "Ace Flockbringer" not in names  # digital-only
-    assert vocab.features.shape == (len(vocab), FEATURE_DIM)
+    assert vocab.features.shape == (len(vocab), feature_dim(COMMANDER))
 
 
 def test_vocab_flags(loaded_conn, vocab):
@@ -173,3 +173,15 @@ def test_vocab_strategy_arrays(loaded_conn):
     assert vocab.src_w[idx("Swamp"), 2] == 1.0  # B at land weight
     assert vocab.pips[idx("Juzám Djinn"), 2] == 2  # {2}{B}{B}
     assert vocab.eff_land[idx("Swamp")] == 1.0
+
+
+def test_card_features_fractional_sources(loaded_conn, vocab):
+    from doubletap.ml.data import BASE_FEATURE_DIM
+
+    swamp = vidx(loaded_conn, vocab, "Swamp")
+    assert vocab.features[swamp, 26:31].tolist() == [0, 0, 1.0, 0, 0]  # B land
+    sol_ring = vidx(loaded_conn, vocab, "Sol Ring")
+    assert vocab.features[sol_ring, 26:31].sum() == 0  # colorless production
+    # modern rejected mana-math features: base width unchanged
+    modern_vocab = build_vocab(loaded_conn, MODERN)
+    assert modern_vocab.features.shape[1] == feature_dim(MODERN) == BASE_FEATURE_DIM
