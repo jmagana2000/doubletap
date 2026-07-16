@@ -84,6 +84,26 @@ here with their canonical contributions and home venues.
   their goldfish methodology is the blueprint for the proposed
   non-circular simulator reward
 
+## Reference works (not authors — ground truth and vocabulary)
+
+- **Comprehensive Rules** (Wizards of the Coast) — the ultimate authority
+  for competitive play: 311 pages of numbered rules plus the official
+  glossary. Current edition effective **2026-06-19**:
+  <https://media.wizards.com/2026/downloads/MagicCompRules%2020260619.pdf>
+  (hyperlinked HTML mirror: <https://yawgatog.com/resources/magic-rules/>).
+  Consult for any rules-semantics question — keyword definitions, layers,
+  state-based actions — before trusting model memory; editions update
+  with each set release.
+- **Keyword glossary** (Wizards) —
+  <https://magic.wizards.com/en/keyword-glossary>: player-facing keyword
+  ability/action definitions; the Scryfall `keywords` field the model
+  consumes uses this vocabulary.
+- **List of Magic slang** (MTG Wiki) —
+  <https://mtg.fandom.com/wiki/List_of_Magic_slang>: community vocabulary
+  (aggro, tempo, goldfish, pip, curve-out, …) — the register DoubleTap's
+  docs and CLI copy deliberately speak. Note: fandom.com blocks
+  programmatic fetches (403); consult in a browser.
+
 ---
 
 *Maintenance*: when citing a new source in the knowledge base, check for a
