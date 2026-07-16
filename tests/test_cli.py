@@ -394,3 +394,17 @@ def test_recommend_without_model_exits_cleanly(loaded_conn, tmp_path):
     result = runner.invoke(app, ["recommend", "--deck", str(deck)])
     assert result.exit_code == 1
     assert "No trained model" in result.output
+
+
+def test_basic_land_split():
+    import numpy as np
+
+    from doubletap.cli import _basic_land_split
+
+    # WUR pips 10/10/8 over 37 lands: proportional, sums exactly
+    counts = _basic_land_split(np.array([10, 10, 0, 8, 0]), 37)
+    assert counts.sum() == 37
+    assert counts[2] == counts[4] == 0  # no B/G pips, no Swamps/Forests
+    assert counts[0] >= counts[3]  # more W pips than R pips
+    # colorless deck: even split
+    assert _basic_land_split(np.zeros(5), 10).sum() == 10

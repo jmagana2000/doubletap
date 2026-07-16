@@ -775,6 +775,12 @@ def complete(
         help="Target Commander Bracket: 1-2 add no Game Changers, 3 keeps the"
         " deck at three or fewer, 4-5 unrestricted",
     ),
+    goldfish: bool = typer.Option(
+        False,
+        "--goldfish",
+        help="Goldfish the completed deck, filling the land gap with basics"
+        " split proportionally to the deck's colored pips",
+    ),
 ):
     """Fill a partial deck's nonland slots with the model's top picks (greedy,
     re-scored after each add). Lands are reported as a gap, not added.
@@ -823,9 +829,61 @@ def complete(
         f"add {lands_needed} lands to reach {fmt.deck_size}."
     )
     _structure_report(deck, vocab, fmt, final)
+    if goldfish:
+        from .ml.goldfish import simulate, slice_deck, vocab_statics
+
+        n_lands = (
+            fmt.deck_size
+            - final.size
+            - sum(1 for i in (commander_idx, partner_idx) if i is not None)
+        )
+        counts = _basic_land_split(vocab.pips[final].sum(axis=0), n_lands)
+        basic_idx = [vocab.index[names.lookup(conn, b)[0].oracle_id] for b in _BASICS]
+        full = np.concatenate([final, np.repeat(basic_idx, counts)])
+        r = simulate(
+            slice_deck(vocab_statics(conn, vocab), full, commander_idx),
+            games=200,
+            turns=10,
+        )
+        mana = "/".join(f"{b} {c}" for b, c in zip(_BASICS, counts) if c)
+        typer.echo(f"\nGoldfish with {n_lands} basics ({mana}):")
+        _goldfish_summary(r)
     if out:
         deck.save(conn, out)
         typer.echo(f"Wrote {out}")
+
+
+_BASICS = ("Plains", "Island", "Swamp", "Mountain", "Forest")  # WUBRG order
+
+
+def _goldfish_summary(r: dict) -> None:
+    typer.echo(f"  goldfish score        {r['score']:.3f}  (0-1, higher is better)")
+    typer.echo(
+        f"  mana efficiency       {r['mana_efficiency']:.1%} of available mana spent"
+    )
+    typer.echo(
+        f"  curve-out rate        {r['curve_out_rate']:.1%} of turns 2-6 cast on curve"
+    )
+    typer.echo(f"  dead turns            {r['dead_turn_rate']:.1%}")
+    if r["commander_on_curve"] is not None:
+        typer.echo(f"  commander on curve    {r['commander_on_curve']:.1%} of games")
+    typer.echo(f"  3 lands by turn 3     {r['land3_rate']:.1%}")
+    typer.echo(f"  4 lands by turn 4     {r['land4_rate']:.1%}")
+    typer.echo(f"  avg mulligans         {r['avg_mulligans']:.2f}")
+
+
+def _basic_land_split(pips, n_lands: int):
+    """Split n_lands basics proportionally to WUBRG pip counts (largest-
+    remainder rounding); colorless decks get an even split."""
+    import numpy as np
+
+    pips = pips.astype(float)
+    share = pips / pips.sum() * n_lands if pips.sum() else np.full(5, n_lands / 5)
+    counts = np.floor(share).astype(int)
+    order = np.argsort(-(share - counts))
+    for i in range(n_lands - counts.sum()):
+        counts[order[i % 5]] += 1
+    return counts
 
 
 @deck_app.command("merge")
@@ -1110,19 +1168,7 @@ def deck_goldfish(
     r = simulate(ds, games=games, turns=turns, on_play=not draw)
 
     typer.echo(f"{deck.format} deck, {ds.n} cards goldfished over {r['games']} games:")
-    typer.echo(f"  goldfish score        {r['score']:.3f}  (0-1, higher is better)")
-    typer.echo(
-        f"  mana efficiency       {r['mana_efficiency']:.1%} of available mana spent"
-    )
-    typer.echo(
-        f"  curve-out rate        {r['curve_out_rate']:.1%} of turns 2-6 cast on curve"
-    )
-    typer.echo(f"  dead turns            {r['dead_turn_rate']:.1%}")
-    if r["commander_on_curve"] is not None:
-        typer.echo(f"  commander on curve    {r['commander_on_curve']:.1%} of games")
-    typer.echo(f"  3 lands by turn 3     {r['land3_rate']:.1%}")
-    typer.echo(f"  4 lands by turn 4     {r['land4_rate']:.1%}")
-    typer.echo(f"  avg mulligans         {r['avg_mulligans']:.2f}")
+    _goldfish_summary(r)
 
 
 @deck_app.command("validate")
