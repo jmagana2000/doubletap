@@ -337,7 +337,17 @@ Seed 2 — best of the sweep on both axes — ships as champion: recovery@50
 recorded), goldfish 0.5068. **New commander champion baselines for future
 bars: recovery@50 21.17, structural 0.7176, goldfish 0.5068.** The model
 now sees both halves of the mana ledger: pip demand on the state tower,
-fractional-source supply on the action tower. **These are the new commander champion baselines for future bars:
+fractional-source supply on the action tower.
+
+**Commander-on-curve check (2026-07-16):** a single-deck observation
+(`complete --goldfish` on a 7-card seed deck showed the commander on
+curve 13.5% vs ~42% under the prior champion) triggered a pre-committed
+regression check: mean commander-on-curve over 50 holdout completions,
+revert if ≥5 pts below the pip champion (reproduced deterministically
+from seed 0 at v0.1.4). Result: pip 60.7%, srcw 60.9% — **no regression**
+(goldfish 0.5072 vs 0.5068). The single-deck number was an artifact of
+that completion, not the model. Lesson: one deck, one seed is an anecdote;
+the holdout protocol is the measurement. **These are the new commander champion baselines for future bars:
 recovery@50 21.17, structural 0.7131, goldfish 0.5097.**
 
 **Modern FAILED the same feature** (floor: old champion 53.77 − 1):
