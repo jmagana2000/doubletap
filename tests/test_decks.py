@@ -211,3 +211,19 @@ def test_partner_and_companion_save_load_round_trip(loaded_conn, tmp_path):
     assert loaded.partner == result.deck.partner
     assert loaded.companion == result.deck.companion
     assert loaded.size() == 3  # two commanders + Sol Ring, companion excluded
+
+
+def test_arena_export_import_lines():
+    """MTG Arena export: Deck/Sideboard headers, (SET) collector tails."""
+    from doubletap.decks import parse_text_lines
+
+    lines = [
+        "Deck",
+        "4 Standard Strike (FDN) 137",
+        "20 Mountain (FDN) 269",
+        "Sideboard",
+        "3 Negate (FDN) 60",
+    ]
+    parsed = parse_text_lines(lines)
+    names = {(p.name, p.qty) for p in parsed}
+    assert names == {("Standard Strike", 4), ("Mountain", 20)}  # sideboard dropped

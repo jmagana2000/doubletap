@@ -241,3 +241,15 @@ def test_analysis_endpoint(client):
 
     decks = client.get("/api/decks").json()
     assert "art" in decks[0] and "colors" in decks[0]
+
+
+def test_set_commander_via_run(client):
+    """The builder's ⚔ Set commander button posts exactly this."""
+    import_deck(client, "1 Sol Ring\n1 Atraxa, Praetors' Voice", name="cmdtest")
+    r = client.get("/api/decks")
+    path = next(d["path"] for d in r.json() if "cmdtest" in d["path"])
+    out = run(client, ["deck", "commander", path, "Atraxa, Praetors' Voice"])
+    assert out["exit_code"] == 0, out["output"]
+    detail = client.get("/api/deck?path=" + path).json()
+    assert detail["commander"]["name"] == "Atraxa, Praetors' Voice"
+    assert detail["size"] == 2  # commander moved out of the main list, count kept

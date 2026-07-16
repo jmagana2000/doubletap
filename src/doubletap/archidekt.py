@@ -17,8 +17,9 @@ DECK_URL = "https://archidekt.com/api/decks/{deck_id}/"
 USER_AGENT = "DoubleTap/0.1 (joshua.magana@gmail.com)"
 
 # verified empirically 2026-07-04: deckFormat=2 returns Modern decks,
-# deckFormat=3 returns Commander decks (7 is Custom — do not trust folklore ids)
-FORMAT_IDS = {"commander": 3, "modern": 2}
+# deckFormat=3 returns Commander decks (7 is Custom — do not trust folklore ids);
+# 2026-07-16: deckFormat=1 returns Standard decks
+FORMAT_IDS = {"commander": 3, "modern": 2, "standard": 1}
 
 _DROPPED_CATEGORIES = {
     "sideboard",

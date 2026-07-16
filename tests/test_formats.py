@@ -289,3 +289,28 @@ def test_companion_rule_yorion_bigger_deck():
     assert rule([(_c("Swamp", "Basic Land — Swamp"), 80)], MODERN) is None
     assert rule([(_c("Swamp", "Basic Land — Swamp"), 60)], MODERN)
     assert rule([(_c("Swamp", "Basic Land — Swamp"), 120)], COMMANDER)
+
+
+def test_standard_format_config_and_validation(loaded_conn):
+    from doubletap import decks, formats
+
+    fmt = formats.get_format("standard")
+    assert fmt.copy_limit == 4 and not fmt.requires_commander
+
+    oid = "aaaaaaaa-1111-2222-3333-444444444444"  # Standard Strike fixture
+    deck = decks.Deck(format="standard")
+    deck.entries[oid] = 4
+    codes = {v.code for v in formats.validate(loaded_conn, deck)}
+    assert "too_many_copies" not in codes
+
+    deck.entries[oid] = 5  # fifth copy violates standard's 4-of rule
+    codes = {v.code for v in formats.validate(loaded_conn, deck)}
+    assert "too_many_copies" in codes
+
+    bolt_deck = decks.Deck(format="standard")
+    bolt = decks and loaded_conn.execute(
+        "SELECT oracle_id FROM cards WHERE name = 'Lightning Bolt'"
+    ).fetchone()[0]
+    bolt_deck.entries[bolt] = 1  # modern-legal, not standard-legal
+    codes = {v.code for v in formats.validate(loaded_conn, bolt_deck)}
+    assert codes & {"not_legal", "illegal"}

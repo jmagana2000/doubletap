@@ -412,7 +412,7 @@ Deck
 1 Sol Ring
 36 Forest"></textarea>
     <div class="row" style="margin-top:10px">
-      <div><label>Format</label><select id="imp-format"><option>commander</option><option>modern</option></select></div>
+      <div><label>Format</label><select id="imp-format"><option>commander</option><option>modern</option><option>standard</option></select></div>
       <div><label>Save as</label><input id="imp-name" placeholder="my-deck" size="18"></div>
       <div><label>Commander (optional)</label><input id="imp-commander" size="22"></div>
       <div><label>Companion (optional)</label><input id="imp-companion" size="18"></div>
@@ -425,7 +425,7 @@ Deck
     <h3>From a file on this machine (CSV or photo)</h3>
     <div class="row">
       <div style="flex:1"><label>File path</label><input id="impf-path" placeholder="/Users/you/Downloads/IMG_1234.HEIC" style="width:100%"></div>
-      <div><label>Format</label><select id="impf-format"><option>commander</option><option>modern</option></select></div>
+      <div><label>Format</label><select id="impf-format"><option>commander</option><option>modern</option><option>standard</option></select></div>
       <button onclick="importFile()">Import</button>
     </div>
     <pre class="out" id="impf-out"></pre>
@@ -437,7 +437,7 @@ Deck
     <div class="row">
       <div><label>Decks to merge (2+)</label><select id="merge-decks" multiple size="6" style="min-width:280px"></select></div>
       <div><label>Output name</label><input id="merge-out" placeholder="my-deck" size="18"></div>
-      <div><label>Format</label><select id="merge-format"><option value="">keep as-is</option><option>commander</option><option>modern</option></select></div>
+      <div><label>Format</label><select id="merge-format"><option value="">keep as-is</option><option>commander</option><option>modern</option><option>standard</option><option>standard</option></select></div>
       <button onclick="mergeDecks()">Merge</button>
     </div>
     <pre class="out" id="merge-out-pre"></pre>
@@ -507,7 +507,7 @@ Deck
     <h3>Corpus</h3>
     <div class="row">
       <button class="ghost" onclick="runInto(['corpus','stats'],'corpus-out',this)">Stats</button>
-      <div><label>Format</label><select id="crawl-format"><option>commander</option><option>modern</option></select></div>
+      <div><label>Format</label><select id="crawl-format"><option>commander</option><option>modern</option><option>standard</option></select></div>
       <div><label>Max decks</label><input id="crawl-max" type="number" value="1000" style="width:100px"></div>
       <button data-cmd="corpus crawl" onclick="crawl()">Crawl</button>
       <button data-cmd="corpus pmi" class="ghost" onclick="runInto(['corpus','pmi','-f',val('crawl-format')],'corpus-out',this)">Build synergy (PMI)</button>
@@ -518,7 +518,7 @@ Deck
   <div class="card" data-cmd="train bc">
     <h3>Train &amp; evaluate</h3>
     <div class="row">
-      <div><label>Format</label><select id="train-format"><option>commander</option><option>modern</option></select></div>
+      <div><label>Format</label><select id="train-format"><option>commander</option><option>modern</option><option>standard</option></select></div>
       <div><label>Steps</label><input id="train-steps" type="number" value="1500" style="width:100px"></div>
       <button onclick="runInto(['train','bc','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train BC</button>
       <button data-cmd="train cql" class="ghost" onclick="runInto(['train','cql','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train CQL</button>
@@ -795,6 +795,7 @@ function openModal(c) {
   $("modal-actions").innerHTML = state.deck ? `
     <button onclick='mutateFromModal("add", ${JSON.stringify(c.name)})'>Add to ${esc(state.deck.name)}</button>
     ${inDeck ? `<button class="ghost" onclick='mutateFromModal("remove", ${JSON.stringify(c.name)})'>Remove (${inDeck.qty} in deck)</button>` : ""}
+    ${state.deck.format === "commander" && /Legendary/.test(c.type_line) && /Creature/.test(c.type_line) && (!state.deck.commander || state.deck.commander.name !== c.name) ? `<button class="ghost" onclick='commanderFromModal(${JSON.stringify(c.name)})'>⚔ Set commander</button>` : ""}
     ${c.type_line.includes("Legendary") && c.type_line.includes("Creature")
       ? `<button class="ghost" onclick='setCommanderFromModal(${JSON.stringify(c.name)})'>⚔ Make commander</button>` : ""}
   ` : `<span class="hint">Select a deck in the builder to add this card.</span>`;
@@ -802,6 +803,13 @@ function openModal(c) {
 }
 function closeModal(){ $("overlay").classList.remove("show"); }
 async function mutateFromModal(action, name){ closeModal(); await mutate(action, name); }
+async function commanderFromModal(name){
+  closeModal();
+  if (!state.deck) return;
+  await run(["deck", "commander", state.deck.path, name]);
+  await pickDeck(state.deck.path);
+  loadDecks();
+}
 async function setCommanderFromModal(name){
   closeModal();
   if (!state.deck) return;

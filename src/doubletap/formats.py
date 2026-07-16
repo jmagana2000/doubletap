@@ -48,7 +48,19 @@ MODERN = FormatConfig(
     structure_weight=1.0,
 )
 
-FORMATS = {f.name: f for f in (COMMANDER, MODERN)}
+STANDARD = FormatConfig(
+    name="standard",
+    legality_key="standard",
+    deck_size=60,
+    exact_size=False,
+    copy_limit=4,
+    requires_commander=False,
+    land_fraction_target=0.40,
+    synergy_weight=1.0,
+    structure_weight=1.0,
+)
+
+FORMATS = {f.name: f for f in (COMMANDER, MODERN, STANDARD)}
 
 # WotC Commander Brackets Beta — cards that count toward the bracket threshold.
 # 0 in a deck → Bracket 1/2; 1-3 → Bracket 3; 4+ → Bracket 4/5.
