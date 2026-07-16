@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .data import STATE_DIM, Vocab
+from .data import Vocab
 
 
 class TwoTowerQ(nn.Module):
@@ -19,6 +19,7 @@ class TwoTowerQ(nn.Module):
     def __init__(
         self,
         card_features: np.ndarray,
+        state_dim: int,
         emb_dim: int = 64,
         hidden: int = 256,
         out_dim: int = 128,
@@ -28,7 +29,7 @@ class TwoTowerQ(nn.Module):
         self.card_emb = nn.EmbeddingBag(n_cards, emb_dim, mode="sum")
         self.register_buffer("card_features", torch.from_numpy(card_features))
         self.state_tower = nn.Sequential(
-            nn.Linear(emb_dim * 2 + STATE_DIM, hidden),
+            nn.Linear(emb_dim * 2 + state_dim, hidden),
             nn.ReLU(),
             nn.Linear(hidden, out_dim),
         )
@@ -137,7 +138,13 @@ def load_checkpoint(path: Path, vocab: Vocab) -> tuple[TwoTowerQ, dict]:
         raise ValueError(
             f"{path} was trained on a different card vocab; re-train after cards sync"
         )
-    model = TwoTowerQ(vocab.features)
+    # state dim is whatever the checkpoint was trained with (per-format)
+    sd = ckpt["state_dict"]
+    emb_dim = sd["card_emb.weight"].shape[1]
+    model = TwoTowerQ(
+        vocab.features,
+        state_dim=sd["state_tower.0.weight"].shape[1] - 2 * emb_dim,
+    )
     try:
         model.load_state_dict(ckpt["state_dict"])
     except RuntimeError as e:

@@ -18,6 +18,9 @@ class FormatConfig:
     land_fraction_target: float
     synergy_weight: float
     structure_weight: float
+    # pip-demand state features: passed commander's keep-bar, failed modern's
+    # (3-seed sweep, rl-strategy-research.md) — hence per-format
+    pip_state: bool = False
 
 
 COMMANDER = FormatConfig(
@@ -30,6 +33,7 @@ COMMANDER = FormatConfig(
     land_fraction_target=0.37,
     synergy_weight=1.0,
     structure_weight=1.0,
+    pip_state=True,
 )
 
 MODERN = FormatConfig(

@@ -37,7 +37,14 @@ TYPE_ORDER = [
 ]
 RARITY_ORDER = ["common", "uncommon", "rare", "mythic"]
 FEATURE_DIM = 1 + len(TYPE_ORDER) + 5 + 5 + 1 + len(RARITY_ORDER) + 1 + 1  # 26
-STATE_DIM = 9 + 1 + 1 + 5  # curve histogram, land fraction, progress, identity
+BASE_STATE_DIM = 9 + 1 + 1 + 5  # curve histogram, land fraction, progress, identity
+
+
+def state_dim(fmt: FormatConfig) -> int:
+    """State-feature width; +5 WUBRG pip-demand dims where the format's
+    keep-bar accepted them (commander yes, modern no — see
+    docs/rl-strategy-research.md)."""
+    return BASE_STATE_DIM + (5 if fmt.pip_state else 0)
 
 
 def _identity_bits(color_identity: list[str]) -> int:
@@ -163,13 +170,16 @@ def state_features(
     commander_idx: int | None,
     partner_idx: int | None = None,
 ) -> np.ndarray:
-    feats = np.zeros(STATE_DIM, dtype=np.float32)
+    feats = np.zeros(state_dim(fmt), dtype=np.float32)
     if partial_idxs.size:
         nonland = partial_idxs[~vocab.land[partial_idxs]]
         hist, _ = np.histogram(vocab.cmc[nonland], bins=np.arange(10) - 0.5)
         feats[0:9] = hist / fmt.deck_size
         feats[9] = vocab.land[partial_idxs].sum() / fmt.deck_size
         feats[10] = partial_idxs.size / fmt.deck_size
+        if fmt.pip_state:
+            # WUBRG pip demand of the partial: what the mana base must support
+            feats[16:21] = vocab.pips[nonland].sum(axis=0) / fmt.deck_size
     if commander_idx is not None or partner_idx is not None:
         bits = 0
         if commander_idx is not None:
@@ -290,7 +300,7 @@ def sample_batch(
         next_state_feats=(
             np.stack(nsf).astype(np.float32)
             if with_next
-            else np.zeros((batch_size, STATE_DIM), dtype=np.float32)
+            else np.zeros((batch_size, state_dim(fmt)), dtype=np.float32)
         ),
         action=np.array(actions, dtype=np.int64),
         commander=np.array(commanders, dtype=np.int64),

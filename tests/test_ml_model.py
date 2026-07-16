@@ -4,7 +4,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from doubletap.formats import COMMANDER  # noqa: E402
-from doubletap.ml.data import build_vocab, load_corpus, sample_batch  # noqa: E402
+from doubletap.ml.data import build_vocab, load_corpus, sample_batch, state_dim  # noqa: E402
 from doubletap.ml.eval import complete_deck, recovery_at_k, score_state  # noqa: E402
 from doubletap.ml.model import TwoTowerQ, load_checkpoint, save_checkpoint  # noqa: E402
 from doubletap.ml.reward import build_pmi, corpus_card_sets  # noqa: E402
@@ -18,7 +18,7 @@ from doubletap.names import lookup  # noqa: E402
 
 def tiny_model(vocab):
     torch.manual_seed(0)
-    return TwoTowerQ(vocab.features, emb_dim=16, hidden=32, out_dim=16)
+    return TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=16, hidden=32, out_dim=16)
 
 
 @pytest.fixture

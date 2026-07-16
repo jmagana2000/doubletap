@@ -4,7 +4,7 @@ import pytest
 from doubletap.formats import COMMANDER, MODERN
 from doubletap.ml.data import (
     FEATURE_DIM,
-    STATE_DIM,
+    state_dim,
     action_mask,
     build_vocab,
     load_corpus,
@@ -75,11 +75,18 @@ def test_state_features(loaded_conn, vocab):
     swamp = vidx(loaded_conn, vocab, "Swamp")
     partial = np.array([sol_ring, swamp, swamp], dtype=np.int64)
     feats = state_features(vocab, COMMANDER, partial, atraxa)
-    assert feats.shape == (STATE_DIM,)
+    assert feats.shape == (state_dim(COMMANDER),)
     assert feats[0:9].sum() == pytest.approx(1 / 100)  # one nonland card
     assert feats[9] == pytest.approx(2 / 100)  # two lands
     assert feats[10] == pytest.approx(3 / 100)
     assert feats[11:16].tolist() == [1, 1, 1, 0, 1]  # WUBRG: Atraxa is WUBG
+    assert feats[16:21].tolist() == [0, 0, 0, 0, 0]  # Sol Ring: no colored pips
+
+    bolt = vidx(loaded_conn, vocab, "Lightning Bolt")
+    feats = state_features(
+        vocab, COMMANDER, np.array([bolt, bolt], dtype=np.int64), None
+    )
+    assert feats[16:21] == pytest.approx([0, 0, 0, 2 / 100, 0])  # two {R} pips
 
 
 def _insert_corpus_deck(conn, deck_id, fmt, entries, commander_oid=None):
@@ -140,7 +147,7 @@ def test_sample_batch_transitions_are_consistent(corpus_conn, vocab):
     assert not vocab.land[batch.action].any()  # targets are always nonland
     assert batch.offsets[0] == 0
     assert np.all(np.diff(batch.offsets) >= 0)
-    assert batch.state_feats.shape == (64, STATE_DIM)
+    assert batch.state_feats.shape == (64, state_dim(COMMANDER))
     # reproducible with the same seed
     again = sample_batch(decks, vocab, COMMANDER, 64, np.random.default_rng(7))
     assert np.array_equal(batch.action, again.action)

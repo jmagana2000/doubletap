@@ -296,6 +296,37 @@ promoted BC over CQL in its day). The keep-bar cuts both ways: it promoted
 CQL when the evidence was real, and it blocked this refactor when the
 evidence wasn't.
 
+## Results (2026-07-15, later) — pip-demand feature PASSED; new champion
+
+A single 5-dim state feature (WUBRG pip counts of the partial deck,
+`state_features[16:21]`, STATE_DIM 16→21) retrained BC+CQL under the bar
+"recovery@50 ≥ 19.79 AND structural > 0.7125":
+
+| | old champion | pip-feature CQL |
+|---|---|---|
+| recovery@50 | 20.79 | **21.17** (@10 9.67, @100 27.87 — all up) |
+| structural composite | 0.7125 | 0.7131 (color_shortfall 0.3383) |
+| goldfish quality | 0.5057 | 0.5097 |
+| BC baseline recovery@50 | 18.47 | 18.78 |
+
+First feature experiment to clear its bar. Contrast with the failed Phase
+B: pip demand is a *state* summary the towers can act on directly (what
+does the mana base owe?), not a strategy label. The structural gain is
+marginal (+0.0006, within noise) but recovery improved across every k —
+the keep decision rests on recovery, with structural merely not
+regressing. **These are the new commander champion baselines for future bars:
+recovery@50 21.17, structural 0.7131, goldfish 0.5097.**
+
+**Modern FAILED the same feature** (floor: old champion 53.77 − 1):
+seed 0 gave 52.31; a 3-seed sweep confirmed the regression is real, not
+noise — seeds [52.31, 47.42, 51.65], mean 50.46, every seed below the
+floor. Reading: modern decks are 1–3 colors of heavily duplicated cards,
+so pip demand adds little beyond the curve/identity features and the
+extra dims cost more than they pay. **Resolution: per-format state
+dims** (`FormatConfig.pip_state`, `data.state_dim(fmt)`) — commander
+ships 21 dims, modern keeps its 16-dim champion (recovery@50 53.77);
+`load_checkpoint` infers the dim from the stored weights.
+
 ## 5. Effort and order
 
 | Phase | Size | Depends on |

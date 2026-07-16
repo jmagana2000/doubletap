@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from ..db import data_home
 from ..formats import FormatConfig
-from .data import build_vocab, load_corpus, sample_batch
+from .data import build_vocab, load_corpus, sample_batch, state_dim
 from .eval import recovery_at_k
 from .model import TwoTowerQ, load_checkpoint, save_checkpoint
 from .reward import PMIModel, step_reward
@@ -100,7 +100,7 @@ def train_cql(
         model.train()
         log(f"initialized from {init_from}")
     else:
-        model = TwoTowerQ(vocab.features)
+        model = TwoTowerQ(vocab.features, state_dim=state_dim(fmt))
     target_model = copy.deepcopy(model)
     target_model.eval()
 

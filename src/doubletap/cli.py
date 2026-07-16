@@ -338,14 +338,34 @@ def deck_remove(
     typer.echo(f"{deck.size()} cards → {path}")
 
 
+def _deck_path(arg: str) -> Path:
+    """Resolve a deck argument: an explicit path, or a saved deck name in
+    ~/.doubletap/decks — the .json extension is optional either way."""
+    candidates = [Path(arg)]
+    if not arg.endswith(".json"):
+        candidates.append(Path(arg + ".json"))
+    candidates += [db.decks_dir() / c.name for c in candidates]
+    for c in candidates:
+        if c.is_file():
+            return c
+    typer.echo(
+        f"No deck found for {arg!r} (also looked in {db.decks_dir()}).", err=True
+    )
+    raise typer.Exit(code=1)
+
+
 @deck_app.command("show")
-def deck_show(path: Path = typer.Argument(..., exists=True, readable=True)):
+def deck_show(
+    name: str = typer.Argument(
+        ..., help="Deck file path or saved deck name (.json optional)"
+    ),
+):
     """List every card in a deck with its mana cost and type, grouped by slot
     (commander, companion, deck)."""
     import json
 
     conn = db.connect()
-    deck = decks.Deck.load(path)
+    deck = decks.Deck.load(_deck_path(name))
 
     def card_row(oid):
         """(name, mana_cost, type_line); falls back to front face for MDFCs."""
