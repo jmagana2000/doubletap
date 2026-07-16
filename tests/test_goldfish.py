@@ -203,3 +203,34 @@ def test_shaper_delta_and_vocab_statics(loaded_conn):
     assert shaper.phi(swamps, None) == phi
     ds = slice_deck(vs, swamps, idx("Juzám Djinn"))
     assert ds.commander_mv == 4
+
+
+def test_goldfish_reranker_promotes_castable(loaded_conn):
+    """With a mono-black mana base, the reranker should prefer a castable
+    black spell over an equally-scored card the mana can't cast."""
+    from doubletap.formats import COMMANDER
+    from doubletap.ml.data import build_vocab
+    from doubletap.ml.goldfish import vocab_statics
+    from doubletap.ml.policy import make_goldfish_reranker
+    from doubletap.names import lookup
+
+    vocab = build_vocab(loaded_conn, COMMANDER)
+    vs = vocab_statics(loaded_conn, vocab)
+
+    def idx(name):
+        return vocab.index[lookup(loaded_conn, name)[0].oracle_id]
+
+    partial = np.array([idx("Swamp")] * 24 + [idx("Juzám Djinn")] * 6, dtype=np.int64)
+    scores = np.full(len(vocab), -np.inf, dtype=np.float32)
+    rats, once = idx("Relentless Rats"), idx("Once Upon a Time")
+    scores[once] = 1.001  # model narrowly prefers the green (uncastable) card
+    scores[rats] = 1.000
+
+    rerank = make_goldfish_reranker(vs, top_m=10, weight=0.5, games=8, turns=8)
+    new = rerank(scores, partial, None)
+    assert new[rats] > new[once]  # goldfish flips it: Rats are castable
+
+    # land-less partial: reranker must no-op
+    spells_only = np.array([idx("Juzám Djinn")] * 30, dtype=np.int64)
+    same = rerank(scores, spells_only, None)
+    assert np.array_equal(same, scores)

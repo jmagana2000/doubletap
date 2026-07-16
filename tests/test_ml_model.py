@@ -276,3 +276,25 @@ def test_structural_quality_scores_completions(rigged_conn):
     assert 0.0 <= q["composite"] <= 1.0
     # fixture pool has ramp (Sol Ring) but no wipes: quota deficit nonzero
     assert q["quota_deficit"] > 0.0
+
+
+def test_awr_weights_and_weighted_bc_loss(rigged_conn):
+    from doubletap.ml.goldfish import Shaper, vocab_statics
+    from doubletap.ml.train_bc import awr_weights, bc_loss
+
+    vocab = build_vocab(rigged_conn, COMMANDER)
+    decks = load_corpus(rigged_conn, vocab, COMMANDER)
+    model = tiny_model(vocab)
+    rng = np.random.default_rng(0)
+    batch = sample_batch(decks, vocab, COMMANDER, 16, rng)
+    shaper = Shaper(vocab_statics(rigged_conn, vocab), games=2, turns=6)
+
+    w = awr_weights(shaper, batch)
+    assert w.shape == (16,)
+    assert (w >= 1 / 5.0).all() and (w <= 5.0).all()  # clipped
+
+    pool = np.flatnonzero(~vocab.land)
+    negs = sample_negatives(pool, 16, 8, rng)
+    weighted = bc_loss(model, batch, negs, w)
+    plain = bc_loss(model, batch, negs)
+    assert torch.isfinite(weighted) and torch.isfinite(plain)

@@ -52,6 +52,7 @@ def complete_deck(
     extra_mask: np.ndarray | None = None,
     capped_idxs: np.ndarray | None = None,
     cap: int = 0,
+    reranker=None,
 ) -> tuple[list[int], np.ndarray]:
     """Greedily fill the deck's nonland slots (deck size minus the land-target
     slots), re-scoring after each add. Lands stay the user's job. Returns
@@ -85,6 +86,8 @@ def complete_deck(
         scores = score_state(
             model, vocab, fmt, partial, commander_idx, partner_idx, mask
         )
+        if reranker is not None:
+            scores = reranker(scores, partial, commander_idx)
         best = int(np.argmax(scores))
         if not np.isfinite(scores[best]):
             break
@@ -168,6 +171,7 @@ def goldfish_quality(
     rng: np.random.Generator | None = None,
     max_decks: int = 50,
     games: int = 100,
+    reranker=None,
 ) -> dict:
     """Mean goldfish score of the model's greedy completions — the
     simulator-based counterpart of structural_quality (statics from
@@ -185,7 +189,8 @@ def goldfish_quality(
         keep[hidden] = False
         partial = deck.main_idxs[keep]
         _, final = complete_deck(
-            model, vocab, fmt, partial, deck.commander_idx, deck.partner_idx
+            model, vocab, fmt, partial, deck.commander_idx, deck.partner_idx,
+            reranker=reranker,
         )
         ds = slice_deck(statics, final, deck.commander_idx)
         scores.append(simulate(ds, games=games, turns=10, seed=0)["score"])
@@ -204,6 +209,7 @@ def recovery_at_k(
     ks: tuple[int, ...] = (10, 50, 100),
     rng: np.random.Generator | None = None,
     max_decks: int = 200,
+    reranker=None,
 ) -> dict:
     """Hide n_hide random nonland cards per held-out deck; measure how many of
     the hidden (distinct) cards appear in the model's top-k suggestions."""
@@ -223,6 +229,8 @@ def recovery_at_k(
         scores = score_state(
             model, vocab, fmt, partial, deck.commander_idx, deck.partner_idx
         )
+        if reranker is not None:
+            scores = reranker(scores, partial, deck.commander_idx)
         order = np.argsort(-scores)
         for k in ks:
             top = order[:k]
@@ -233,3 +241,53 @@ def recovery_at_k(
         "recovery": {k: round(float(np.mean(v)) * 100, 2) for k, v in totals.items()},
         "mean_top_cmc": round(float(np.mean(structural)), 2) if structural else None,
     }
+
+
+def make_goldfish_reranker(
+    statics,
+    top_m: int = 30,
+    weight: float = 0.3,
+    games: int = 4,
+    turns: int = 8,
+    seed: int = 0,
+):
+    """Inference-time re-ranking: blend the model's top-M candidate scores
+    with each candidate's goldfish delta (docs/goldfish-sim-design.md,
+    Tier-1 follow-up). Returns reranker(scores, partial, commander_idx).
+
+    No-ops on decks the goldfish can't read (no lands / too small), so
+    land-less user decks are unaffected."""
+    from .goldfish import Shaper
+
+    shaper = Shaper(statics, weight=1.0, games=games, turns=turns, seed=seed)
+
+    def reranker(scores, partial_idxs, commander_idx):
+        base_phi = shaper.phi(partial_idxs, commander_idx)
+        if base_phi == 0.0:
+            return scores
+        order = np.argsort(-scores)[:top_m]
+        order = order[np.isfinite(scores[order])]
+        if order.size < 2:
+            return scores
+        deltas = np.array(
+            [
+                shaper.phi(np.append(partial_idxs, int(c)), commander_idx)
+                - base_phi
+                for c in order
+            ]
+        )
+        band = scores[order]
+        span_s = float(band.max() - band.min()) or 1.0
+        span_d = float(deltas.max() - deltas.min()) or 1.0
+        blended = (1 - weight) * (band - band.min()) / span_s + weight * (
+            deltas - deltas.min()
+        ) / span_d
+        # reassign the band its own score values in blended order (goldfish
+        # delta breaks blended ties): the top-M stay above everything else,
+        # reordered among themselves
+        ranked = order[np.lexsort((-deltas, -blended))]
+        new_scores = scores.copy()
+        new_scores[ranked] = np.sort(band)[::-1]
+        return new_scores
+
+    return reranker

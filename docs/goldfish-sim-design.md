@@ -72,9 +72,66 @@ to human behavior tightly enough that reward engineering of any kind only
 reorders near-data actions. The champion remains the default; the Shaper
 stays in the codebase as an inert, tested capability.
 
-Promising next directions (each needs its own pre-committed bar):
-1. **Inference-time goldfish re-ranking** — rerank recommend's top-k by
-   goldfish delta at suggestion time. No training, no recovery risk, uses
-   Stage 1 directly; likely the best value-per-effort.
-2. Lower CQL alpha (relax conservatism) with shaping — riskier for
-   recovery, the natural follow-up experiment.
+## Tier 1 experiments (2026-07-15, from the RL-models review)
+
+Built and keep-bar gated (same bar: goldfish ≥ +10% over champion 0.5057,
+recovery@50 ≥ 19.79):
+
+1. **Inference-time goldfish re-ranking** (`policy.make_goldfish_reranker`)
+   — blend model top-M scores with per-candidate goldfish deltas at
+   suggestion time; sidesteps CQL conservatism entirely. Results below.
+2. **AWR — advantage-weighted regression** (`train_bc.train_awr`) — BC
+   cross-entropy weighted by `exp(standardized goldfish delta)` of the
+   human's pick: imitation itself leans toward functionally better picks,
+   no TD, no conservatism knob. Results below.
+
+### Re-ranking result: keep-bar FAILED — code ships inert
+
+| | champion | rerank w=0.3 | rerank w=0.5 | bar |
+|---|---|---|---|---|
+| goldfish quality | 0.5057 | 0.5081 (+0.5%) | 0.5121 (+1.3%) | ≥ 0.5563 (+10%) |
+| recovery@50 | 20.79 | 20.79 | 20.79 | ≥ 19.79 |
+
+Direction is right (goldfish rises monotonically with weight, recovery@50
+untouched by construction — the reranker only reorders inside the top-M
+band), but the effect is an order of magnitude short of the bar. The
+bottleneck isn't ordering: the model's top-30 candidates are already
+similar enough functionally that reordering them barely moves how the
+finished deck goldfishes. `make_goldfish_reranker` stays in the codebase
+as a tested, inert capability; no CLI flag, champion behavior unchanged.
+
+### AWR result: keep-bar FAILED on both axes — code ships inert
+
+| | champion | AWR (clip 5, 4 games, 8 turns) | bar |
+|---|---|---|---|
+| goldfish quality | 0.5057 | 0.5127 (+1.4%) | ≥ 0.5563 (+10%) |
+| recovery@50 | 20.79 | 18.12 | ≥ 19.79 (floor broken) |
+
+Advantage weighting moved goldfish quality about as much as re-ranking
+did (+1.4%) but paid for it in imitation fidelity — the first experiment
+in this program to break the recovery floor. Reading: goldfish deltas of
+single picks are noisy relative to their spread, so the exp-weights
+mostly inject variance into BC rather than signal. `train_awr` stays in
+the codebase inert (checkpoint saved as `awr_<fmt>.pt`, never selected
+at inference); champion unchanged.
+
+Tier 1 conclusion: neither inference-time re-ranking nor
+advantage-weighted imitation clears +10% goldfish quality. Combined with
+the two shaping negatives, the per-pick goldfish signal appears too weak
+relative to candidate similarity — future attempts should operate on
+whole-deck comparisons (see DPO below) or relax conservatism directly.
+
+## Future work (Tier 2/3, not built — each needs its own bar)
+
+- **IQL (implicit Q-learning)** — expectile regression avoids querying
+  OOD actions without CQL's explicit penalty; the natural next algorithm
+  if any goldfish-signal training approach ever shows a pulse.
+- **Decision Transformer** — return-conditioned sequence model over
+  deck-building trajectories; needs goldfish score as return-to-go and
+  order-invariance handling (decks are sets, not sequences).
+- **GFlowNets** — sample diverse decks proportional to reward instead of
+  argmax; attractive for `complete`'s creativity, heavy lift.
+- **DPO over deck pairs** — preference pairs from goldfish comparisons of
+  same-commander decks; no reward model, but needs a generative policy.
+- Lower CQL alpha (relax conservatism) with shaping — riskier for
+  recovery, the cheapest follow-up experiment.
