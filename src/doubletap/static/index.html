@@ -355,6 +355,7 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
       <div class="type-chips" id="type-chips">
         <button class="chip on" data-t="">All types</button>
         <button class="chip" data-t="Creature">Creatures</button>
+        <button class="chip" data-t="Legendary Creature">⚔ Commanders</button>
         <button class="chip" data-t="Instant">Instants</button>
         <button class="chip" data-t="Sorcery">Sorceries</button>
         <button class="chip" data-t="Artifact">Artifacts</button>
@@ -664,8 +665,12 @@ function renderShelf(d) {
     return;
   }
   $("shelf-title").textContent = d.name;
-  const cmd = d.commander ? d.commander.name + (d.partner ? " + " + d.partner.name : "") : "no commander — deck commander <deck> <name>";
+  const cmd = d.commander ? d.commander.name + (d.partner ? " + " + d.partner.name : "")
+    : (d.format === "commander"
+        ? "⚠ commander missing — filter ⚔ Commanders, open a legendary creature, Set commander"
+        : "no commander");
   $("shelf-cmd").textContent = (d.commander ? "⚔ " : "") + cmd;
+  $("shelf-cmd").style.color = (!d.commander && d.format === "commander") ? "var(--gold)" : "";
 
   // group by primary type
   const order = ["Creature","Instant","Sorcery","Artifact","Enchantment","Planeswalker","Battle","Land"];

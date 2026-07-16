@@ -253,3 +253,17 @@ def test_set_commander_via_run(client):
     detail = client.get("/api/deck?path=" + path).json()
     assert detail["commander"]["name"] == "Atraxa, Praetors' Voice"
     assert detail["size"] == 2  # commander moved out of the main list, count kept
+
+
+def test_legendary_creature_filter_and_missing_commander_flag(client):
+    """The ⚔ Commanders chip queries type=Legendary Creature; a commander
+    deck without a commander reports the missing_commander violation."""
+    r = client.get("/api/cards?type=Legendary+Creature&format=commander")
+    names = {c["name"] for c in r.json()}
+    assert "Atraxa, Praetors' Voice" in names
+    assert "Sol Ring" not in names
+
+    import_deck(client, "1 Sol Ring", name="nocmd")
+    path = next(d["path"] for d in client.get("/api/decks").json() if "nocmd" in d["path"])
+    detail = client.get("/api/deck?path=" + path).json()
+    assert any("commander" in v for v in detail["violations"])
