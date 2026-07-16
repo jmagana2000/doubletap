@@ -309,6 +309,21 @@ def deck_add(
             typer.echo(f"note: {v.message}")
 
 
+@deck_app.command("drop")
+def deck_drop(
+    name: str = typer.Argument(
+        ..., help="Deck file path or saved deck name (.json optional)"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation"),
+):
+    """Delete a saved deck file. Asks first unless --yes."""
+    path = _deck_path(name)
+    if not yes and not typer.confirm(f"Delete {path.name}?"):
+        raise typer.Exit(code=1)
+    path.unlink()
+    typer.echo(f"Dropped {path.name}")
+
+
 @deck_app.command("remove")
 def deck_remove(
     path: Path = typer.Argument(..., exists=True, readable=True),

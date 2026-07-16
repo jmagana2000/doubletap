@@ -23,6 +23,7 @@ ALL_COMMANDS = [
     ("deck", "show"),
     ("deck", "add"),
     ("deck", "remove"),
+    ("deck", "drop"),
     ("deck", "commander"),
     ("deck", "merge"),
     ("deck", "bracket"),
@@ -267,3 +268,12 @@ def test_legendary_creature_filter_and_missing_commander_flag(client):
     path = next(d["path"] for d in client.get("/api/decks").json() if "nocmd" in d["path"])
     detail = client.get("/api/deck?path=" + path).json()
     assert any("commander" in v for v in detail["violations"])
+
+
+def test_drop_deck_via_run(client):
+    """The builder's Drop button posts exactly this."""
+    import_deck(client, "1 Sol Ring", name="doomed")
+    path = next(d["path"] for d in client.get("/api/decks").json() if "doomed" in d["path"])
+    out = run(client, ["deck", "drop", path, "--yes"])
+    assert out["exit_code"] == 0, out["output"]
+    assert all("doomed" not in d["path"] for d in client.get("/api/decks").json())
