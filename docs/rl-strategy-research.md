@@ -316,6 +316,26 @@ marginal (+0.0006, within noise) but recovery improved across every k —
 the keep decision rests on recovery, with structural merely not
 regressing.
 
+## Results (2026-07-16) — Standard format: BC ships, CQL missed by 0.10
+
+First Standard corpus (8k crawled, 1,502 parsed — public standard decks
+are mostly unfinished/rotated, hence the 81% rejection rate) and models,
+judged under the original CQL-vs-BC bar (+2 recovery@50):
+
+| seed | BC @50 | CQL @50 | delta |
+|---|---|---|---|
+| 0 | 54.35 | 56.32 | +1.97 |
+| 1 | 56.68 | 59.19 | +2.51 |
+| 2 | 53.64 | 54.86 | +1.22 |
+| mean (bar +2.00) | | | **+1.90 FAIL** |
+
+CQL consistently beats BC in standard but not by enough — the same
+pattern commander showed on small corpora before its 9.3k-deck retrain
+cleared the bar. **bc_standard ships as the default; revisit CQL after
+the standard corpus grows** (the crawl is resumable; different
+`--order-by` values reach different decks). Mana-math features stay off
+for standard (`pip_state=False`) pending their own experiment.
+
 ## Results (2026-07-16) — fractional-source feature PASSED on a 3-seed sweep
 
 The supply-side complement: 5 WUBRG fractional-source dims (Karsten
