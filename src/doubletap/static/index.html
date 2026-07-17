@@ -160,6 +160,14 @@ pre.out.err{border-color:#7e3a3a}
   background:linear-gradient(180deg,rgba(201,168,106,.10),transparent)}
 #shelf .shelf-head h3{font-size:15px;color:var(--gold);margin:0}
 #shelf .cmd-line{font-size:12px;color:var(--dim);margin-top:3px}
+.sugg-row{display:flex;align-items:center;gap:8px;padding:5px 2px;border-bottom:1px solid rgba(42,47,60,.5);font-size:13px}
+.sugg-row a{cursor:pointer;color:var(--text);flex:0 0 auto}
+.sugg-row a:hover{color:var(--gold)}
+.sugg-row .tl{flex:1;color:var(--dim);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sugg-row button,.swap-picker button{padding:2px 8px;font-size:11.5px}
+.swap-picker{padding:7px 2px;font-size:12.5px;border-bottom:1px solid var(--gold-dim)}
+.swap-picker select{max-width:170px}
+#suggest-chips .chip{font-size:11px;padding:3px 8px}
 #deck-groups{max-height:56vh;overflow-y:auto;padding:6px 0}
 .tgroup{padding:8px 16px 2px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#7d6f52;
   border-bottom:1px solid rgba(201,168,106,.12);margin-bottom:2px}
@@ -397,6 +405,21 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
       <button class="ghost" data-cmd="deck drop" onclick="dropDeck()" style="color:#e06c75">Drop</button>
       </div>
       <pre class="out" id="shelf-out"></pre>
+      <div id="suggest-box">
+        <div class="actions" style="margin-top:10px">
+          <button data-cmd="recommend" onclick="loadSuggestions()">✦ Suggest</button>
+          <span id="suggest-chips">
+            <button class="chip on" data-st="">All</button>
+            <button class="chip" data-st="Creature">Creature</button>
+            <button class="chip" data-st="Instant">Instant</button>
+            <button class="chip" data-st="Sorcery">Sorcery</button>
+            <button class="chip" data-st="Artifact">Artifact</button>
+            <button class="chip" data-st="Enchantment">Enchant</button>
+            <button class="chip" data-st="Planeswalker">PW</button>
+          </span>
+        </div>
+        <div id="suggest-list"></div>
+      </div>
     </div>
   </aside>
 </section>
@@ -727,6 +750,54 @@ async function mutate(action, name) {
 async function shelfAction(cmd) {
   if (!state.deck) return;
   await runInto(["deck", cmd, state.deck.path], "shelf-out");
+}
+/* ---------- suggestions: filterable recommend with add/swap ---------- */
+let suggestType = "";
+document.querySelectorAll("#suggest-chips .chip").forEach(ch => ch.onclick = () => {
+  document.querySelectorAll("#suggest-chips .chip").forEach(x => x.classList.remove("on"));
+  ch.classList.add("on"); suggestType = ch.dataset.st;
+  if ($("suggest-list").childElementCount) loadSuggestions();
+});
+async function loadSuggestions() {
+  if (!state.deck) return;
+  $("suggest-list").innerHTML = `<div class="hint">Consulting the archive…</div>`;
+  const p = new URLSearchParams({path: state.deck.path, k: "10"});
+  if (suggestType) p.set("type", suggestType);
+  const r = await fetch("/api/suggest?" + p);
+  if (!r.ok) { $("suggest-list").innerHTML = `<div class="hint">No model yet — run doubletap train first.</div>`; return; }
+  const d = await r.json();
+  $("suggest-list").innerHTML = d.suggestions.map(c => `
+    <div class="sugg-row">
+      <a onclick='openModal(${JSON.stringify(c).replace(/'/g,"&#39;")})'>${esc(c.name)}</a>
+      <span class="tl">${manaPips(c.mana_cost)} ${c.synergy && c.synergy.length ? "· with " + esc(c.synergy.slice(0,2).join(", ")) : ""}</span>
+      <span>
+        <button class="ghost" onclick='mutate("add", ${JSON.stringify(c.name)})'>+ Add</button>
+        <button class="ghost" onclick='startSwap(${JSON.stringify(c.name)})'>⇄ Swap</button>
+      </span>
+    </div>`).join("") || `<div class="hint">Nothing legal matches that filter.</div>`;
+}
+function startSwap(name) {
+  const options = state.deck.cards
+    .map(c => `<option value=${JSON.stringify(c.name)}>${esc(c.name)}${c.qty > 1 ? ` (${c.qty})` : ""}</option>`)
+    .join("");
+  document.querySelectorAll(".swap-picker").forEach(e => e.remove());
+  const div = document.createElement("div");
+  div.className = "swap-picker";
+  div.innerHTML = `Swap in <b>${esc(name)}</b> for
+    <select id="swap-out">${options}</select>
+    <button class="ghost" onclick='doSwap(${JSON.stringify(name)})'>Go</button>
+    <button class="ghost" onclick='this.parentElement.remove()'>✕</button>`;
+  $("suggest-list").prepend(div);
+}
+async function doSwap(addName) {
+  const cutName = $("swap-out").value;
+  const cut = await run(["deck", "remove", state.deck.path, cutName]);
+  if (cut.exit_code !== 0) { alert(cut.output.trim()); return; }
+  const add = await run(["deck", "add", state.deck.path, addName]);
+  if (add.exit_code !== 0) alert(add.output.trim());
+  await pickDeck(state.deck.path);
+  loadDecks();
+  loadSuggestions();
 }
 async function dropDeck() {
   if (!state.deck) return;

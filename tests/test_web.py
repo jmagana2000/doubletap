@@ -294,3 +294,34 @@ def test_duplicate_add_refused_in_commander(client):
     for _ in range(2):
         assert run(client, ["deck", "add", path, "Relentless Rats"])["exit_code"] == 0
     assert run(client, ["deck", "add", path, "Sol Ring", "--force"])["exit_code"] == 0
+
+
+def test_suggest_endpoint_with_filters(client, loaded_conn, data_home):
+    """The builder's Suggest panel: structured top-k with a type filter."""
+    import torch
+
+    from doubletap.formats import COMMANDER
+    from doubletap.ml.data import build_vocab, state_dim
+    from doubletap.ml.infer_np import save_np_checkpoint
+    from doubletap.ml.model import TwoTowerQ
+
+    vocab = build_vocab(loaded_conn, COMMANDER)
+    torch.manual_seed(0)
+    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8)
+    models = data_home / "models"
+    models.mkdir(exist_ok=True)
+    save_np_checkpoint(models / "cql_commander.npz", tiny.state_dict(), vocab.oracle_ids, "commander", "cql")
+
+    import_deck(client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n")
+    path = client.get("/api/decks").json()[0]["path"]
+
+    r = client.get("/api/suggest", params={"path": path, "k": "5"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["model"] == "cql"
+    assert 0 < len(d["suggestions"]) <= 5
+    assert all("score" in c and "name" in c for c in d["suggestions"])
+    assert all(c["name"] != "Sol Ring" for c in d["suggestions"])  # copy limit
+
+    r = client.get("/api/suggest", params={"path": path, "k": "5", "type": "Creature"})
+    assert all("Creature" in c["type_line"] for c in r.json()["suggestions"])

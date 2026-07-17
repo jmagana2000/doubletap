@@ -170,6 +170,50 @@ def search_cards(
     return [_card_view(json.loads(raw)) for (raw,) in conn.execute(sql, params)]
 
 
+def suggest_cards(path: str, k: int = 12, type_: str = "") -> dict:
+    """Structured recommendations for the builder: top-k additions with
+    scores and synergy rationale, optionally filtered by card type — the
+    interactive counterpart of the recommend CLI (same model, same blend)."""
+    import numpy as np
+
+    from . import db, decks, formats
+    from .cli import _deck_to_idxs, _load_model
+
+    conn = db.connect()
+    deck = decks.Deck.load(Path(path))
+    fmt = formats.get_format(deck.format)
+    vocab, model, ckpt, _model_path = _load_model(conn, fmt, None)
+
+    from .ml.eval import score_state
+    from .ml.neighbors import blend, neighbor_frequencies
+    from .ml.reward import PMIModel
+
+    partial, commander_idx, partner_idx = _deck_to_idxs(conn, deck, vocab, fmt)
+    scores = score_state(model, vocab, fmt, partial, commander_idx, partner_idx)
+    freqs = neighbor_frequencies(conn, vocab, fmt, partial)
+    if freqs is not None:
+        scores = blend(scores, freqs, 0.3)
+    pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
+    pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
+
+    suggestions = []
+    for idx in np.argsort(-scores):
+        if not np.isfinite(scores[idx]) or len(suggestions) == k:
+            break
+        card = formats.get_card(conn, vocab.oracle_ids[int(idx)])
+        if type_ and type_ not in card.get("type_line", ""):
+            continue
+        view = _card_view(card)
+        view["score"] = round(float(scores[idx]), 3)
+        if pmi is not None:
+            view["synergy"] = [
+                formats.get_card(conn, vocab.oracle_ids[c])["name"]
+                for c, _v in pmi.top_contributors(int(idx), partial)
+            ]
+        suggestions.append(view)
+    return {"model": ckpt["algo"], "suggestions": suggestions}
+
+
 def deck_detail(path: str) -> dict:
     """One deck, structured for the builder: slots, per-card data, violations."""
     from . import db, decks, formats
@@ -270,6 +314,18 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/analysis":
             try:
                 self._send(200, deck_analysis(qs["path"]))
+            except Exception as e:
+                self._send(404, {"error": str(e)})
+        elif url.path == "/api/suggest":
+            try:
+                self._send(
+                    200,
+                    suggest_cards(
+                        qs["path"],
+                        k=int(qs.get("k", "12")),
+                        type_=qs.get("type", ""),
+                    ),
+                )
             except Exception as e:
                 self._send(404, {"error": str(e)})
         else:
