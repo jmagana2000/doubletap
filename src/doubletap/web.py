@@ -170,14 +170,21 @@ def search_cards(
     return [_card_view(json.loads(raw)) for (raw,) in conn.execute(sql, params)]
 
 
-def suggest_cards(path: str, k: int = 12, type_: str = "") -> dict:
-    """Structured recommendations for the builder: top-k additions with
-    scores and synergy rationale, optionally filtered by card type — the
-    interactive counterpart of the recommend CLI (same model, same blend)."""
+def suggest_cards(
+    path: str,
+    k: int = 12,
+    type_: str = "",
+    personalize: float = 0.3,
+    max_price: float | None = None,
+) -> dict:
+    """Structured recommendations for the builder and Suggestions pages:
+    top-k additions with scores and synergy rationale, optionally filtered
+    by card type and price — the interactive counterpart of the recommend
+    CLI (same model, same blend)."""
     import numpy as np
 
     from . import db, decks, formats
-    from .cli import _deck_to_idxs, _load_model
+    from .cli import _budget_mask, _deck_to_idxs, _load_model
 
     conn = db.connect()
     deck = decks.Deck.load(Path(path))
@@ -189,10 +196,13 @@ def suggest_cards(path: str, k: int = 12, type_: str = "") -> dict:
     from .ml.reward import PMIModel
 
     partial, commander_idx, partner_idx = _deck_to_idxs(conn, deck, vocab, fmt)
-    scores = score_state(model, vocab, fmt, partial, commander_idx, partner_idx)
+    extra_mask = _budget_mask(conn, vocab, max_price) if max_price else None
+    scores = score_state(
+        model, vocab, fmt, partial, commander_idx, partner_idx, extra_mask
+    )
     freqs = neighbor_frequencies(conn, vocab, fmt, partial)
-    if freqs is not None:
-        scores = blend(scores, freqs, 0.3)
+    if freqs is not None and personalize > 0:
+        scores = blend(scores, freqs, personalize)
     pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
     pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
 
@@ -333,6 +343,10 @@ class Handler(BaseHTTPRequestHandler):
                         qs["path"],
                         k=int(qs.get("k", "12")),
                         type_=qs.get("type", ""),
+                        personalize=float(qs.get("personalize", "0.3")),
+                        max_price=float(qs["max_price"])
+                        if qs.get("max_price")
+                        else None,
                     ),
                 )
             except Exception as e:

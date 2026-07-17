@@ -503,10 +503,11 @@ Deck
       <div><label>How many</label><input id="rec-k" type="number" value="20" min="1" style="width:80px"></div>
       <div><label>Personalize (0–1)</label><input id="rec-pers" type="number" value="0.3" step="0.1" min="0" max="1" style="width:80px"></div>
       <div><label>Max $/card (optional)</label><input id="rec-price" type="number" step="0.5" min="0" style="width:100px"></div>
+      <div><label>Type</label><select id="rec-type"><option value="">Any</option><option>Creature</option><option>Instant</option><option>Sorcery</option><option>Artifact</option><option>Enchantment</option><option>Planeswalker</option></select></div>
       <button onclick="recommend()">Recommend</button>
       <span class="spin" id="rec-spin">running…</span>
     </div>
-    <pre class="out" id="rec-out"></pre>
+    <div id="rec-list"></div>
   </div>
 
   <div class="card" data-cmd="complete">
@@ -751,33 +752,48 @@ async function shelfAction(cmd) {
   if (!state.deck) return;
   await runInto(["deck", cmd, state.deck.path], "shelf-out");
 }
-/* ---------- suggestions: filterable recommend with add/swap ---------- */
+/* ---------- suggestions: filterable recommend with add/swap ----------
+   shared by the Builder shelf panel and the Suggestions page */
 let suggestType = "";
+let suggCtx = {path: null, listId: "suggest-list", refresh: null};
 document.querySelectorAll("#suggest-chips .chip").forEach(ch => ch.onclick = () => {
   document.querySelectorAll("#suggest-chips .chip").forEach(x => x.classList.remove("on"));
   ch.classList.add("on"); suggestType = ch.dataset.st;
   if ($("suggest-list").childElementCount) loadSuggestions();
 });
-async function loadSuggestions() {
-  if (!state.deck) return;
-  $("suggest-list").innerHTML = `<div class="hint">Consulting the archive…</div>`;
-  const p = new URLSearchParams({path: state.deck.path, k: "10"});
-  if (suggestType) p.set("type", suggestType);
-  const r = await fetch("/api/suggest?" + p);
-  if (!r.ok) { $("suggest-list").innerHTML = `<div class="hint">No model yet — run doubletap train first.</div>`; return; }
-  const d = await r.json();
-  $("suggest-list").innerHTML = d.suggestions.map(c => `
+function suggRows(d, listId) {
+  return d.suggestions.map(c => `
     <div class="sugg-row">
       <a onclick='openModal(${JSON.stringify(c).replace(/'/g,"&#39;")})'>${esc(c.name)}</a>
-      <span class="tl">${manaPips(c.mana_cost)} ${c.synergy && c.synergy.length ? "· with " + esc(c.synergy.slice(0,2).join(", ")) : ""}</span>
+      <span class="tl">${manaPips(c.mana_cost)} · ${c.score.toFixed(3)}${c.price != null ? ` · $${c.price.toFixed(2)}` : ""}${c.synergy && c.synergy.length ? " · with " + esc(c.synergy.slice(0,2).join(", ")) : ""}</span>
       <span>
-        <button class="ghost" onclick='mutate("add", ${JSON.stringify(c.name)})'>+ Add</button>
+        <button class="ghost" onclick='suggAdd(${JSON.stringify(c.name)})'>+ Add</button>
         <button class="ghost" onclick='startSwap(${JSON.stringify(c.name)})'>⇄ Swap</button>
       </span>
-    </div>`).join("") || `<div class="hint">Nothing legal matches that filter.</div>`;
+    </div>`).join("") || `<div class="hint">Nothing legal matches those filters.</div>`;
 }
-function startSwap(name) {
-  const options = state.deck.cards
+async function fetchSuggest(params, listId) {
+  $(listId).innerHTML = `<div class="hint">Consulting the archive…</div>`;
+  const r = await fetch("/api/suggest?" + params);
+  if (!r.ok) { $(listId).innerHTML = `<div class="hint">No trained model for this format yet — see Data &amp; Models.</div>`; return; }
+  $(listId).innerHTML = suggRows(await r.json(), listId);
+}
+async function loadSuggestions() {   // builder shelf panel
+  if (!state.deck) return;
+  suggCtx = {path: state.deck.path, listId: "suggest-list",
+             refresh: async () => { await pickDeck(state.deck.path); loadDecks(); loadSuggestions(); }};
+  const p = new URLSearchParams({path: state.deck.path, k: "10"});
+  if (suggestType) p.set("type", suggestType);
+  await fetchSuggest(p, "suggest-list");
+}
+async function suggAdd(name) {
+  const res = await run(["deck", "add", suggCtx.path, name]);
+  if (res.exit_code !== 0) alert(res.output.trim());
+  await suggCtx.refresh();
+}
+async function startSwap(name) {
+  const detail = await (await fetch("/api/deck?path=" + encodeURIComponent(suggCtx.path))).json();
+  const options = detail.cards
     .map(c => `<option value=${JSON.stringify(c.name)}>${esc(c.name)}${c.qty > 1 ? ` (${c.qty})` : ""}</option>`)
     .join("");
   document.querySelectorAll(".swap-picker").forEach(e => e.remove());
@@ -787,17 +803,15 @@ function startSwap(name) {
     <select id="swap-out">${options}</select>
     <button class="ghost" onclick='doSwap(${JSON.stringify(name)})'>Go</button>
     <button class="ghost" onclick='this.parentElement.remove()'>✕</button>`;
-  $("suggest-list").prepend(div);
+  $(suggCtx.listId).prepend(div);
 }
 async function doSwap(addName) {
   const cutName = $("swap-out").value;
-  const cut = await run(["deck", "remove", state.deck.path, cutName]);
+  const cut = await run(["deck", "remove", suggCtx.path, cutName]);
   if (cut.exit_code !== 0) { alert(cut.output.trim()); return; }
-  const add = await run(["deck", "add", state.deck.path, addName]);
+  const add = await run(["deck", "add", suggCtx.path, addName]);
   if (add.exit_code !== 0) alert(add.output.trim());
-  await pickDeck(state.deck.path);
-  loadDecks();
-  loadSuggestions();
+  await suggCtx.refresh();
 }
 async function dropDeck() {
   if (!state.deck) return;
@@ -942,11 +956,15 @@ async function mergeDecks() {
 /* ---------- other tabs ---------- */
 function lookup() { if (val("lookup-q")) runInto(["cards", "lookup", val("lookup-q")], "lookup-out"); }
 async function recommend() {
-  const args = ["recommend", "--deck", val("rec-deck"), "-k", val("rec-k") || "20",
-                "--personalize", val("rec-pers") || "0.3"];
-  if (val("rec-price")) args.push("--max-card-price", val("rec-price"));
+  const path = val("rec-deck");
+  if (!path) return;
+  suggCtx = {path, listId: "rec-list", refresh: recommend};
+  const p = new URLSearchParams({path, k: val("rec-k") || "20",
+                                 personalize: val("rec-pers") || "0.3"});
+  if (val("rec-price")) p.set("max_price", val("rec-price"));
+  if (val("rec-type")) p.set("type", val("rec-type"));
   $("rec-spin").classList.add("show");
-  await runInto(args, "rec-out");
+  await fetchSuggest(p, "rec-list");
   $("rec-spin").classList.remove("show");
 }
 async function completeDeck() {
