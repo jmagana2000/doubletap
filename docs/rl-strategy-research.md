@@ -344,6 +344,24 @@ shares one honest holdout. All champions retrained and re-baselined on
 the new split; the numbers below supersede everything above as keep-bar
 baselines. Expect them lower — that is the point.
 
+### Re-baselined champions (2026-07-17, canonical leakproof split, seed 0)
+
+| format | BC@50 | CQL@50 | delta (bar +2) | default | structural | goldfish |
+|---|---|---|---|---|---|---|
+| commander | **22.11** | 23.03 | +0.92 ✗ | **BC** | 0.7504 | 0.5234 |
+| modern | 46.10 | **48.26** | +2.16 ✓ | **CQL** | 0.5110 | 0.4936 |
+| standard | 52.77 | **56.23** | +3.46 ✓ | **CQL** | 0.4794 | 0.5692 |
+
+Two verdicts flipped, both in the honest direction: commander's CQL edge
+(+2.32 on the old split) was largely a split artifact — BC is commander's
+default again, as it was before 2026-07-13. Standard's CQL, which missed
+by 0.10 on contaminated splits, clears the bar decisively at +3.46.
+Modern's CQL survives with ~5.5 pts of duplicate-memorization inflation
+removed from its headline number. Commander's mana-math features
+(pip_state) remain in the shipped BC/CQL models — their original PASS
+predates the honest split and should be re-litigated only if a future
+experiment needs to isolate them.
+
 ## Results (2026-07-16) — Standard format: BC ships, CQL missed by 0.10
 
 First Standard corpus (8k crawled, 1,502 parsed — public standard decks
