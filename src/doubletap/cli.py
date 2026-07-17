@@ -696,15 +696,14 @@ def _budget_mask(conn, vocab, max_card_price):
 
 
 def _game_changer_idxs(conn, vocab) -> set[int]:
-    """Vocab indices of every Game Changer present in the card cache."""
-    idxs = set()
-    for name in formats.GAME_CHANGERS:
-        row = conn.execute(
-            "SELECT oracle_id FROM cards WHERE name = ?", (name,)
-        ).fetchone()
-        if row and row[0] in vocab.index:
-            idxs.add(vocab.index[row[0]])
-    return idxs
+    """Vocab indices of every Game Changer (Scryfall's game_changer flag)."""
+    return {
+        vocab.index[oid]
+        for (oid,) in conn.execute(
+            "SELECT oracle_id FROM cards WHERE json_extract(json, '$.game_changer')"
+        )
+        if oid in vocab.index
+    }
 
 
 def _structure_report(deck, vocab, fmt, partial):
@@ -994,6 +993,8 @@ def deck_merge(
 @deck_app.command("bracket")
 def deck_bracket(path: Path = typer.Argument(..., exists=True, readable=True)):
     """Show the Commander Bracket for a deck based on its Game Changers content."""
+    import json
+
     conn = db.connect()
     deck = decks.Deck.load(path)
     all_oids = list(deck.entries)
@@ -1001,14 +1002,14 @@ def deck_bracket(path: Path = typer.Argument(..., exists=True, readable=True)):
         all_oids.append(deck.commander)
     if deck.partner:
         all_oids.append(deck.partner)
-    card_names = []
+    cards = []
     for oid in all_oids:
         row = conn.execute(
-            "SELECT name FROM cards WHERE oracle_id = ?", (oid,)
+            "SELECT json FROM cards WHERE oracle_id = ?", (oid,)
         ).fetchone()
         if row:
-            card_names.append(row[0])
-    bracket, found = formats.compute_bracket(card_names)
+            cards.append(json.loads(row[0]))
+    bracket, found = formats.compute_bracket(cards)
     typer.echo(f"Bracket {bracket}: {formats.BRACKETS[bracket]}")
     if found:
         typer.echo(f"\nGame Changers present ({len(found)}):")

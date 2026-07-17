@@ -65,47 +65,6 @@ FORMATS = {f.name: f for f in (COMMANDER, MODERN, STANDARD)}
 # WotC Commander Brackets Beta — cards that count toward the bracket threshold.
 # 0 in a deck → Bracket 1/2; 1-3 → Bracket 3; 4+ → Bracket 4/5.
 # Source: https://magic.wizards.com/en/news/announcements/introducing-commander-brackets-beta
-GAME_CHANGERS: frozenset[str] = frozenset(
-    {
-        # Best-in-class tutors
-        "Demonic Tutor",
-        "Vampiric Tutor",
-        "Enlightened Tutor",
-        "Worldly Tutor",
-        "Mystical Tutor",
-        "Imperial Seal",
-        "Gamble",
-        "Lim-Dûl's Vault",
-        "Tainted Pact",
-        # Lock-out / information denial
-        "Drannith Magistrate",
-        "Opposition Agent",
-        # Fast mana
-        "Chrome Mox",
-        "Mana Crypt",
-        "Mana Vault",
-        "Mox Diamond",
-        "Jeweled Lotus",
-        "Grim Monolith",
-        "Ancient Tomb",
-        # Resource snowball
-        "Smothering Tithe",
-        "Rhystic Study",
-        # Win-condition engines
-        "Thassa's Oracle",
-        "Underworld Breach",
-        "Dockside Extortionist",
-        "Food Chain",
-        "Survival of the Fittest",
-        "Cyclonic Rift",
-        # Problem commanders (flagged, not banned)
-        "Urza, Lord High Artificer",
-        "Tergrid, God of Fright",
-        "Grand Arbiter Augustin IV",
-    }
-)
-
-
 BRACKETS = {
     1: "Exhibition  — ultra-casual, no Game Changers, no combos, no land denial",
     2: "Core        — precon power, no Game Changers, no combos",
@@ -115,9 +74,15 @@ BRACKETS = {
 }
 
 
-def compute_bracket(card_names: list[str]) -> tuple[int, list[str]]:
-    """Return (bracket_number, list_of_game_changers_present) for a card name list."""
-    found = [n for n in card_names if n in GAME_CHANGERS]
+def is_game_changer(card: dict) -> bool:
+    """Scryfall tracks the official Game Changers list per card — prefer
+    this over the hardcoded snapshot; it updates with every cards sync."""
+    return bool(card.get("game_changer"))
+
+
+def compute_bracket(cards: list[dict]) -> tuple[int, list[str]]:
+    """Return (bracket_number, names_of_game_changers_present) for card JSONs."""
+    found = [c["name"] for c in cards if is_game_changer(c)]
     count = len(found)
     if count == 0:
         bracket = (

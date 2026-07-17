@@ -267,8 +267,9 @@ def deck_analysis(path: str) -> dict:
         if oid:
             entries[oid] = entries.get(oid, 0) + 1
     report = analysis.deck_report(conn, entries, deck.format)
-    names = [formats.get_card(conn, oid)["name"] for oid in entries]
-    bracket, game_changers = formats.compute_bracket(names)
+    bracket, game_changers = formats.compute_bracket(
+        [formats.get_card(conn, oid) for oid in entries]
+    )
     return {
         "roles": {r: sorted(cards) for r, cards in report.by_role.items()},
         "targets": analysis.COMMANDER_TARGETS if deck.format == "commander" else {},

@@ -345,3 +345,19 @@ def test_named_copy_caps(loaded_conn):
     modern.entries[dwarves] = 7  # card text raises modern's 4-of to 7
     codes = {v.code for v in formats.validate(loaded_conn, modern)}
     assert "too_many_copies" not in codes
+
+
+def test_game_changers_from_scryfall_flag(loaded_conn):
+    """Bracket math reads Scryfall's game_changer field, not a snapshot."""
+    from doubletap import formats
+    from doubletap.names import lookup
+
+    def card(name):
+        return formats.get_card(loaded_conn, lookup(loaded_conn, name)[0].oracle_id)
+
+    assert formats.is_game_changer(card("Rhystic Study"))
+    assert not formats.is_game_changer(card("Sol Ring"))
+    bracket, found = formats.compute_bracket([card("Rhystic Study"), card("Sol Ring")])
+    assert bracket == 3 and found == ["Rhystic Study"]
+    bracket, found = formats.compute_bracket([card("Sol Ring")])
+    assert bracket == 2 and found == []
