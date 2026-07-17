@@ -221,7 +221,14 @@ def suggest_cards(
                 for c, _v in pmi.top_contributors(int(idx), partial)
             ]
         suggestions.append(view)
-    return {"model": ckpt["algo"], "suggestions": suggestions}
+    return {
+        "model": ckpt["algo"],
+        "suggestions": suggestions,
+        # so the UI can steer full decks toward Swap instead of Add
+        "deck_size": deck.size(),
+        "target_size": fmt.deck_size,
+        "exact_size": fmt.exact_size,
+    }
 
 
 def deck_detail(path: str) -> dict:

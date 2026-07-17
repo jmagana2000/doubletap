@@ -347,3 +347,23 @@ def test_suggest_personalize_and_price_params(client, loaded_conn, data_home):
     assert r.status_code == 200, r.text
     for c in r.json()["suggestions"]:
         assert c["price"] is None or c["price"] <= 0.50
+
+
+def test_suggest_reports_deck_fullness(client, loaded_conn, data_home):
+    import torch
+
+    from doubletap.formats import COMMANDER
+    from doubletap.ml.data import build_vocab, state_dim
+    from doubletap.ml.infer_np import save_np_checkpoint
+    from doubletap.ml.model import TwoTowerQ
+
+    vocab = build_vocab(loaded_conn, COMMANDER)
+    torch.manual_seed(0)
+    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8)
+    (data_home / "models").mkdir(exist_ok=True)
+    save_np_checkpoint(data_home / "models" / "cql_commander.npz", tiny.state_dict(), vocab.oracle_ids, "commander", "cql")
+    import_deck(client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n98 Swamp\n")
+    path = client.get("/api/decks").json()[0]["path"]
+
+    d = client.get("/api/suggest", params={"path": path, "k": "3"}).json()
+    assert d["deck_size"] == 100 and d["target_size"] == 100 and d["exact_size"]

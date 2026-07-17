@@ -762,15 +762,19 @@ document.querySelectorAll("#suggest-chips .chip").forEach(ch => ch.onclick = () 
   if ($("suggest-list").childElementCount) loadSuggestions();
 });
 function suggRows(d, listId) {
-  return d.suggestions.map(c => `
+  suggCtx.full = d.exact_size && d.deck_size >= d.target_size;
+  const banner = suggCtx.full
+    ? `<div class="warnline"><span class="sig">⚠</span>Deck is full (${d.deck_size}/${d.target_size}) — Add would overfill it; use ⇄ Swap.</div>`
+    : "";
+  return banner + (d.suggestions.map(c => `
     <div class="sugg-row">
       <a onclick='openModal(${JSON.stringify(c).replace(/'/g,"&#39;")})'>${esc(c.name)}</a>
       <span class="tl">${manaPips(c.mana_cost)} · ${c.score.toFixed(3)}${c.price != null ? ` · $${c.price.toFixed(2)}` : ""}${c.synergy && c.synergy.length ? " · with " + esc(c.synergy.slice(0,2).join(", ")) : ""}</span>
       <span>
-        <button class="ghost" onclick='suggAdd(${JSON.stringify(c.name)})'>+ Add</button>
+        ${suggCtx.full ? "" : `<button class="ghost" onclick='suggAdd(${JSON.stringify(c.name)})'>+ Add</button>`}
         <button class="ghost" onclick='startSwap(${JSON.stringify(c.name)})'>⇄ Swap</button>
       </span>
-    </div>`).join("") || `<div class="hint">Nothing legal matches those filters.</div>`;
+    </div>`).join("") || `<div class="hint">Nothing legal matches those filters.</div>`);
 }
 async function fetchSuggest(params, listId) {
   $(listId).innerHTML = `<div class="hint">Consulting the archive…</div>`;
