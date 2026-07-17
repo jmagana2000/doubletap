@@ -234,6 +234,31 @@ poison/mill), market price. Heuristic — see `docs/gameplay-blindspots.md`.
 |---|---|---|
 | `PATH` | required | The deck JSON file to analyze |
 
+**`deck swaps NAME`** — recommend (cut, add) swap pairs, valued by the
+measured swap delta Δ(cut, add) = model score of the add minus the cut's
+own re-add score, both evaluated on the deck *without* the cut — so
+pairwise interactions count, and a pair only appears when the model
+scores the swap as a strict upgrade (Δ > 0). Cut candidates are ranked
+by three signals: the model's own score for the card in deck context,
+total PMI synergy with the deck, and role-quota surplus; scarce win
+conditions are never offered as cuts, and lands are `deck manabase`'s
+job. Each pair states why the cut was chosen.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `NAME` | required | Deck file path or saved deck name (`.json` optional) |
+| `-k` | 5 | Number of swap pairs |
+| `--max-card-price` | none | Budget cap on suggested additions |
+
+In the Builder, the ⇄ Swaps button shows the same pairs with a one-click
+Go, and the manual swap picker lists your cards best-cut-first.
+
+**`deck format NAME [FORMAT]`** — show or change a deck's format. Away
+from commander, the commander/partner move into the main deck; toward
+commander, the slot is left unset (the Builder's warning points at the
+fix). The deck is re-validated against the new format immediately, so a
+conversion reports exactly what became illegal.
+
 **`deck manabase NAME`** — recommend a complete mana base for the deck's
 spells: Karsten land count (curve regression), per-color source
 requirements (hypergeometric tables), real lands chosen greedily to cover

@@ -808,7 +808,7 @@ async function loadSwaps() {
   const d = await r.json();
   $("suggest-list").innerHTML = d.swaps.map(s => `
     <div class="sugg-row">
-      <span class="tl">− ${esc(s.cut)} → + ${esc(s.add)}<br><span style="color:var(--dim)">${esc(s.reason)}</span></span>
+      <span class="tl">− ${esc(s.cut)} → + ${esc(s.add)} <b>Δ ${s.delta > 0 ? "+" : ""}${s.delta.toFixed(3)}</b><br><span style="color:var(--dim)">${esc(s.reason)}</span></span>
       <button class="ghost" onclick='doPairSwap(${JSON.stringify(s.cut)}, ${JSON.stringify(s.add)})'>⇄ Go</button>
     </div>`).join("") || `<div class="hint">No cuttable cards found.</div>`;
 }

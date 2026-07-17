@@ -8,8 +8,10 @@ deck (the signal that identified a zero-synergy card for the first manual
 swap), and role-quota surplus (cutting from an overfull role costs less).
 Adds come from the same model+personalize blend as recommend/suggest.
 
-ponytail: pairs are greedy rank-order matches, not a learned pair value —
-a swap-delta model is the marked upgrade path (rl-strategy-research.md)."""
+Pairs are valued by the measured swap delta Δ(i,j) = V(d−i+j) − V(d):
+the champion model re-scores the pool on the deck without each candidate
+cut, so pairwise interactions are captured (2026-07-17 upgrade from the
+original greedy rank-pairing)."""
 
 import sqlite3
 from dataclasses import dataclass
@@ -125,21 +127,49 @@ def recommend_swaps(
     k: int = 5,
     extra_mask=None,
 ) -> list[dict]:
-    """Top-k (cut, add) pairs: worst cuts matched to best adds by rank.
-    Each pair carries the cut's reason and the add's synergy partners."""
+    """Top-k (cut, add) pairs by measured swap delta — the review's
+    Δ(i,j) = V(d − i + j) − V(d), evaluated with the champion model:
+    for each candidate cut, the whole pool is re-scored on the deck
+    WITHOUT that cut, so the delta = add's score − cut's re-add score
+    captures the pairwise interaction (an add can be great precisely
+    because the cut is gone). Pairs are a greedy max-delta matching,
+    each cut and add used once; the cut's diagnostic reason comes along."""
     from .ml.eval import score_state
     from .ml.neighbors import blend, neighbor_frequencies
 
     cuts = rank_cuts(
-        conn, model, vocab, fmt, partial, commander_idx, partner_idx, pmi, k=k
+        conn, model, vocab, fmt, partial, commander_idx, partner_idx, pmi, k=k * 2
     )
-    scores = score_state(
-        model, vocab, fmt, partial, commander_idx, partner_idx, extra_mask
-    )
+    if not cuts:
+        return []
+    # personalize once on the full deck; a one-card cut barely moves the
+    # neighbor set and per-cut neighbor scans are the expensive part
     freqs = neighbor_frequencies(conn, vocab, fmt, partial)
-    if freqs is not None:
-        scores = blend(scores, freqs, 0.3)
-    add_order = [i for i in np.argsort(-scores) if np.isfinite(scores[i])][:k]
+
+    candidates = []  # (delta, cut, add_idx, add_score)
+    for cut in cuts:
+        drop = np.flatnonzero(partial == cut.idx)[0]
+        rest = np.delete(partial, drop)
+        scores = score_state(
+            model, vocab, fmt, rest, commander_idx, partner_idx, extra_mask
+        )
+        if freqs is not None:
+            scores = blend(scores, freqs, 0.3)
+        cut_score = scores[cut.idx] if np.isfinite(scores[cut.idx]) else None
+        if cut_score is None:
+            continue
+        for add_idx in np.argsort(-scores)[: k * 2]:
+            add_idx = int(add_idx)
+            if not np.isfinite(scores[add_idx]) or add_idx == cut.idx:
+                continue
+            candidates.append(
+                (
+                    float(scores[add_idx] - cut_score),
+                    cut,
+                    add_idx,
+                    float(scores[add_idx]),
+                )
+            )
 
     def card_name(i):
         row = conn.execute(
@@ -147,13 +177,20 @@ def recommend_swaps(
         ).fetchone()
         return row[0] if row else vocab.oracle_ids[int(i)]
 
-    swaps = []
-    for cut, add_idx in zip(cuts, add_order):
+    swaps, used_cuts, used_adds = [], set(), set()
+    for delta, cut, add_idx, add_score in sorted(candidates, key=lambda t: -t[0]):
+        if cut.idx in used_cuts or add_idx in used_adds or len(swaps) == k:
+            continue
+        if delta <= 0:
+            break  # a swap the model scores as a downgrade is not a swap
+        used_cuts.add(cut.idx)
+        used_adds.add(add_idx)
         entry = {
             "cut": cut.name,
             "add": card_name(add_idx),
             "reason": cut.reason,
-            "add_score": round(float(scores[add_idx]), 3),
+            "delta": round(delta, 3),
+            "add_score": round(add_score, 3),
         }
         if pmi is not None:
             entry["add_synergy"] = [

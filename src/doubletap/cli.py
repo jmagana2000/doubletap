@@ -968,7 +968,7 @@ def deck_swaps(
     typer.echo(f"Top {len(pairs)} swaps ({ckpt['algo']} model):")
     for p in pairs:
         typer.echo(f"  − {p['cut']}")
-        line = f"  + {p['add']}  ({p['add_score']})"
+        line = f"  + {p['add']}  (Δ {p['delta']:+.3f})"
         if p.get("add_synergy"):
             line += "  with " + ", ".join(p["add_synergy"][:2])
         typer.echo(line)

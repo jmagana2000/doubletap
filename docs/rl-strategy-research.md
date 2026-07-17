@@ -352,6 +352,15 @@ baselines. Expect them lower — that is the point.
 | modern | 46.10 | **48.26** | +2.16 ✓ | **CQL** | 0.5110 | 0.4936 |
 | standard | 52.77 | **56.23** | +3.46 ✓ | **CQL** | 0.4794 | 0.5692 |
 
+**Swap-delta upgrade (2026-07-17, later):** `recommend_swaps` moved from
+greedy rank-pairing to the review's Δ(i,j) = V(d−i+j) − V(d), evaluated
+with the champion: the pool is re-scored on the deck without each
+candidate cut, pairs are a greedy max-Δ matching, and only strict
+upgrades (Δ > 0) are offered. No training involved — the champion model
+is the value function; a *learned* pairwise swap model over real edit
+trajectories remains the long-horizon idea (see Phase 4 of the external
+review's roadmap).
+
 Two verdicts flipped, both in the honest direction: commander's CQL edge
 (+2.32 on the old split) was largely a split artifact — BC is commander's
 default again, as it was before 2026-07-13. Standard's CQL, which missed

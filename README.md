@@ -308,6 +308,23 @@ The web UI (`doubletap web`) shows the same analysis as live charts:
 
 ![Deck Analytics — mana curve, color balance, type breakdown, roles vs targets](https://raw.githubusercontent.com/jmagana2000/doubletap/main/docs/img/analytics.png)
 
+### Swaps and mana bases
+
+Two commands act on the analysis instead of just reporting it:
+
+```bash
+doubletap deck swaps my-deck          # what to cut, what to add, and why
+doubletap deck manabase my-deck       # a complete land package, Karsten math
+```
+
+`deck swaps` pairs your worst-fitting cards (by the model's own scoring,
+synergy with the deck, and role surpluses) with the best additions, each
+pair valued by the measured improvement delta — only strict upgrades are
+offered. `deck manabase` builds a full land package from Karsten's land
+count and colored-source requirements, then goldfishes it against an
+all-basics baseline to prove the nonbasics earn their slots. Both are in
+the Builder too (⇄ Swaps and Manabase buttons).
+
 ### Goldfishing: how does the deck actually play?
 
 ```bash
