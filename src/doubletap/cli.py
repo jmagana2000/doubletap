@@ -295,18 +295,31 @@ def deck_add(
     path: Path = typer.Argument(..., exists=True, readable=True),
     name: str = typer.Argument(..., help="Card to add"),
     qty: int = typer.Option(1, "--qty", "-n", help="How many copies"),
+    force: bool = typer.Option(False, "--force", help="Add even past the copy limit"),
 ):
-    """Add a card to a saved deck. Warns if it breaks format rules
-    (copy limit, color identity) but saves anyway — fix at your leisure."""
+    """Add a card to a saved deck. Adding past the copy limit (singleton in
+    Commander, 4-of elsewhere, card-text caps respected) is refused unless
+    --force; other rule breaks (color identity) warn but save."""
     conn = db.connect()
     deck = decks.Deck.load(path)
     oid, resolved = _resolve_one(conn, name)
     deck.entries[oid] += qty
+    violations = [
+        v
+        for v in formats.validate(conn, deck)
+        if v.code != "wrong_size" and v.oracle_id == oid
+    ]
+    if not force and any(v.code == "too_many_copies" for v in violations):
+        typer.echo(
+            f"refused: {next(v.message for v in violations if v.code == 'too_many_copies')}"
+            " (--force to add anyway)",
+            err=True,
+        )
+        raise typer.Exit(code=1)
     deck.save(conn, path)
     typer.echo(f"+{qty} {resolved} ({deck.size()} cards) → {path}")
-    for v in formats.validate(conn, deck):
-        if v.code != "wrong_size" and v.oracle_id == oid:
-            typer.echo(f"note: {v.message}")
+    for v in violations:
+        typer.echo(f"note: {v.message}")
 
 
 @deck_app.command("drop")

@@ -175,7 +175,9 @@ def test_deck_add_and_remove(loaded_conn, tmp_path):
 
     out = import_deck(tmp_path, body="1 Sol Ring\n")
 
-    result = runner.invoke(app, ["deck", "add", str(out), "Lightning Bolt", "-n", "4"])
+    result = runner.invoke(
+        app, ["deck", "add", str(out), "Lightning Bolt", "-n", "4", "--force"]
+    )
     assert result.exit_code == 0, result.output
     assert Deck.load(out).entries[oid(loaded_conn, "Lightning Bolt")] == 4
 
@@ -201,13 +203,22 @@ def test_deck_add_and_remove(loaded_conn, tmp_path):
     assert Deck.load(out).size() == 1  # just Sol Ring
 
 
-def test_deck_add_warns_on_violation(loaded_conn, tmp_path):
-    # Juzám Djinn is black; Atraxa deck is WUBG, so no warning there —
-    # use a commander deck and add a second copy to trip the copy limit
+def test_deck_add_refuses_duplicates(loaded_conn, tmp_path):
+    from doubletap.decks import Deck
+
+    # a second copy in a commander deck is refused, nothing written
     out = import_deck(tmp_path)
     result = runner.invoke(app, ["deck", "add", str(out), "Sol Ring"])
-    assert result.exit_code == 0
+    assert result.exit_code == 1
+    assert "refused" in result.output
     assert "exceeds the 1-copy limit" in result.output
+    assert Deck.load(out).entries[oid(loaded_conn, "Sol Ring")] == 1
+
+    # --force overrides, still noting the violation
+    result = runner.invoke(app, ["deck", "add", str(out), "Sol Ring", "--force"])
+    assert result.exit_code == 0
+    assert "note:" in result.output
+    assert Deck.load(out).entries[oid(loaded_conn, "Sol Ring")] == 2
 
 
 def test_deck_remove_clears_commander_slot(loaded_conn, tmp_path):

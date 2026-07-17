@@ -165,15 +165,18 @@ slots, then quantity, name, mana cost, and type line per card, alphabetical.
 |---|---|---|
 | `NAME` | required | A saved deck name (`deck show my-deck` finds `~/.doubletap/decks/my-deck.json`) or an explicit file path; the `.json` extension is optional either way |
 
-**`deck add PATH NAME`** — add a card. Warns on rule violations the add
-causes (copy limit, color identity) but saves anyway. Exit 1 on unresolved
-names, nothing written.
+**`deck add PATH NAME`** — add a card. Adding past the copy limit
+(singleton in Commander, 4-of elsewhere; card-text caps like Seven
+Dwarves/Nazgûl respected) is **refused** — exit 1, nothing written —
+unless `--force`. Other rule breaks (color identity) warn but save.
+Exit 1 on unresolved names, nothing written.
 
 | Parameter | Default | Description |
 |---|---|---|
 | `PATH` | required | The deck JSON file to modify |
 | `NAME` | required | Card to add; must match exactly (typos get suggestions) |
 | `--qty`, `-n` | 1 | How many copies to add |
+| `--force` | off | Add even past the copy limit |
 
 **`deck remove PATH NAME`** — remove a card. Removing the
 commander/partner/companion by name clears that slot. Exit 1 if the card

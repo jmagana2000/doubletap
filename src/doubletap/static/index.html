@@ -717,7 +717,10 @@ function renderShelf(d) {
 
 async function mutate(action, name) {
   if (!state.deck) return;
-  await run(["deck", action, state.deck.path, name]);
+  const res = await run(["deck", action, state.deck.path, name]);
+  if (res && res.exit_code !== 0) {
+    alert(res.output.trim() || `deck ${action} failed`);
+  }
   await pickDeck(state.deck.path);
   loadDecks();
 }

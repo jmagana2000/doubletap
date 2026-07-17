@@ -277,3 +277,20 @@ def test_drop_deck_via_run(client):
     out = run(client, ["deck", "drop", path, "--yes"])
     assert out["exit_code"] == 0, out["output"]
     assert all("doomed" not in d["path"] for d in client.get("/api/decks").json())
+
+
+def test_duplicate_add_refused_in_commander(client):
+    """The builder's Add button must not silently create an illegal duplicate."""
+    import_deck(client, "1 Sol Ring", name="duptest")
+    path = next(d["path"] for d in client.get("/api/decks").json() if "duptest" in d["path"])
+
+    out = run(client, ["deck", "add", path, "Sol Ring"])
+    assert out["exit_code"] == 1
+    assert "refused" in out["output"]
+    detail = client.get("/api/deck?path=" + path).json()
+    assert detail["size"] == 1  # deck unchanged
+
+    # any-number and capped cards still add freely up to their cap
+    for _ in range(2):
+        assert run(client, ["deck", "add", path, "Relentless Rats"])["exit_code"] == 0
+    assert run(client, ["deck", "add", path, "Sol Ring", "--force"])["exit_code"] == 0
