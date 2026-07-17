@@ -8,7 +8,7 @@ from doubletap.ml.data import build_vocab, load_corpus, sample_batch, state_dim 
 from doubletap.ml.eval import complete_deck, recovery_at_k, score_state  # noqa: E402
 from doubletap.ml.model import TwoTowerQ, load_checkpoint, save_checkpoint  # noqa: E402
 from doubletap.ml.reward import build_pmi, corpus_card_sets  # noqa: E402
-from doubletap.ml.train_bc import bc_loss, sample_negatives  # noqa: E402
+from doubletap.ml.train_bc import bc_loss, sample_negatives, split_corpus  # noqa: E402
 from doubletap.ml.train_cql import batch_rewards, cql_losses  # noqa: E402
 
 from test_ml_data import _insert_corpus_deck  # noqa: E402
@@ -298,3 +298,30 @@ def test_awr_weights_and_weighted_bc_loss(rigged_conn):
     weighted = bc_loss(model, batch, negs, w)
     plain = bc_loss(model, batch, negs)
     assert torch.isfinite(weighted) and torch.isfinite(plain)
+
+
+def test_split_corpus_is_canonical_and_leakproof(rigged_conn):
+    """Near-duplicate decks land on the same side, and membership ignores
+    the training seed (the 2026-07-17 leakage findings)."""
+    vocab = build_vocab(rigged_conn, COMMANDER)
+    decks = load_corpus(rigged_conn, vocab, COMMANDER)
+    # forge near-duplicates: clone a deck with one card changed
+    import copy
+
+    clone = copy.deepcopy(decks[0])
+    clone.deck_id = 999_999
+    clone.main_idxs = clone.main_idxs.copy()
+    clone.main_idxs[0] = decks[1].main_idxs[0]
+    pool = decks + [clone]
+
+    for seed in (0, 1, 7):
+        train, holdout = split_corpus(pool, holdout_fraction=0.3, seed=seed)
+        train_ids = {d.deck_id for d in train}
+        hold_ids = {d.deck_id for d in holdout}
+        # the clone travels with its original — never split across sides
+        assert (decks[0].deck_id in train_ids) == (999_999 in train_ids)
+        # membership identical across seeds
+        if seed == 0:
+            canonical = (frozenset(train_ids), frozenset(hold_ids))
+        else:
+            assert (frozenset(train_ids), frozenset(hold_ids)) == canonical

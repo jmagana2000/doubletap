@@ -316,6 +316,34 @@ marginal (+0.0006, within noise) but recovery improved across every k —
 the keep decision rests on recovery, with structural merely not
 regressing.
 
+## Results (2026-07-17) — leakage check: two channels found, split rebuilt
+
+The external review's leakage warning (near-duplicate public decks
+straddling the train/test split) was checked with exact Jaccard between
+every holdout and train deck:
+
+| format | holdout leaky (max-J ≥ 0.8) | recovery@50 leaky vs clean |
+|---|---|---|
+| commander | 5.8% (mostly ≥0.9: precon uploads) | 20.0 vs 23.4 (noise, not inflation) |
+| modern | 6.0% | **97.0 vs 51.1** — near-copies are memorized |
+| standard | 4.7% | (eval invalid, see channel 2) |
+
+**Channel 2, found via an inconsistency** (standard "holdout" recovery
+came back 78.5 vs the recorded 54.4): `split_corpus` derived membership
+from the *training* seed, so seed-sweep champions (commander srcw seed 2,
+standard seed 2) had different holdouts than seed 0 — any cross-model
+comparison on the "shared" split was contaminated by decks the shipped
+model trained on. Each champion's own recorded metric was honest; the
+comparisons weren't guaranteed to be.
+
+**Fix (per the pre-committed rule):** `split_corpus` is now canonical and
+cluster-aware — near-duplicate clusters (Jaccard ≥ 0.8 union-find,
+bucketed by commander) stay wholly on one side, and membership comes from
+a fixed rng, never the training seed, so every model and every sweep seed
+shares one honest holdout. All champions retrained and re-baselined on
+the new split; the numbers below supersede everything above as keep-bar
+baselines. Expect them lower — that is the point.
+
 ## Results (2026-07-16) — Standard format: BC ships, CQL missed by 0.10
 
 First Standard corpus (8k crawled, 1,502 parsed — public standard decks

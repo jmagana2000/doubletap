@@ -12,12 +12,56 @@ from .eval import recovery_at_k
 from .model import TwoTowerQ, save_checkpoint
 
 
+def _dup_clusters(decks: list[CorpusDeck]) -> np.ndarray:
+    """Cluster id per deck: near-duplicates (card-set Jaccard >= 0.8) share a
+    cluster via union-find. Comparison is bucketed by commander (copied
+    commander decks keep their commander) with one bucket for commander-less
+    formats — full pairwise there is fine at current corpus sizes.
+    ponytail: near-dupes with different commanders slip through; rare."""
+    parent = list(range(len(decks)))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    buckets: dict[int | None, list[int]] = {}
+    for i, d in enumerate(decks):
+        buckets.setdefault(d.commander_idx, []).append(i)
+    for members in buckets.values():
+        if len(members) < 2:
+            continue
+        sets = [set(map(int, np.unique(decks[i].main_idxs))) for i in members]
+        for a in range(len(members)):
+            for b in range(a + 1, len(members)):
+                inter = len(sets[a] & sets[b])
+                if inter / (len(sets[a]) + len(sets[b]) - inter) >= 0.8:
+                    ra, rb = find(members[a]), find(members[b])
+                    if ra != rb:
+                        parent[rb] = ra
+    return np.array([find(i) for i in range(len(decks))])
+
+
 def split_corpus(decks: list[CorpusDeck], holdout_fraction: float = 0.1, seed: int = 0):
-    rng = np.random.default_rng(seed)
-    order = rng.permutation(len(decks))
+    """Canonical train/holdout split: near-duplicate clusters stay on one
+    side (no leakage), and membership is derived from a FIXED rng — never
+    the training seed — so every model and seed sweep shares one holdout
+    (the 2026-07-17 leakage check caught both failure modes)."""
+    del seed  # kept for call-site compatibility; membership must not vary
+    clusters = _dup_clusters(decks)
+    ids = list(dict.fromkeys(clusters.tolist()))  # cluster ids, stable order
+    order = np.random.default_rng(0).permutation(len(ids))
     n_holdout = max(1, int(len(decks) * holdout_fraction))
-    holdout = [decks[i] for i in order[:n_holdout]]
-    train = [decks[i] for i in order[n_holdout:]]
+    holdout_clusters, count = set(), 0
+    for j in order:
+        if count >= n_holdout or len(holdout_clusters) == len(ids) - 1:
+            break  # train must keep at least one cluster
+        cid = ids[j]
+        holdout_clusters.add(cid)
+        count += int((clusters == cid).sum())
+    holdout = [d for d, c in zip(decks, clusters) if c in holdout_clusters]
+    train = [d for d, c in zip(decks, clusters) if c not in holdout_clusters]
     return train, holdout
 
 
