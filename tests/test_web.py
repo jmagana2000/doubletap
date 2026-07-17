@@ -422,3 +422,29 @@ def test_swaps_sorted_by_delta(client, loaded_conn, data_home):
     # no cut or add repeats across the pair set
     assert len({s["cut"] for s in d["swaps"]}) == len(d["swaps"])
     assert len({s["add"] for s in d["swaps"]}) == len(d["swaps"])
+
+
+def test_suggest_format_override(client, loaded_conn, data_home):
+    """The Suggestions 'Build as' dropdown: a commander deck served by the
+    modern model+rules when format=modern is passed."""
+    torch = pytest.importorskip("torch")
+
+    from doubletap.formats import MODERN
+    from doubletap.ml.data import build_vocab, state_dim
+    from doubletap.ml.infer_np import save_np_checkpoint
+    from doubletap.ml.model import TwoTowerQ
+
+    vocab = build_vocab(loaded_conn, MODERN)
+    torch.manual_seed(0)
+    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(MODERN), emb_dim=8, hidden=16, out_dim=8)
+    (data_home / "models").mkdir(exist_ok=True)
+    save_np_checkpoint(data_home / "models" / "bc_modern.npz", tiny.state_dict(), vocab.oracle_ids, "modern", "bc")
+    import_deck(client, "4 Lightning Bolt\n")  # imported as commander by default
+
+    path = next(d["path"] for d in client.get("/api/decks").json())
+    # no commander model planted: deck's own format fails, override succeeds
+    assert client.get("/api/suggest", params={"path": path, "k": "3"}).status_code == 404
+    r = client.get("/api/suggest", params={"path": path, "k": "3", "format": "modern"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["model"] == "bc" and d["suggestions"]

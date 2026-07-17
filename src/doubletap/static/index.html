@@ -506,6 +506,7 @@ Deck
       <div><label>How many</label><input id="rec-k" type="number" value="20" min="1" style="width:80px"></div>
       <div><label>Personalize (0–1)</label><input id="rec-pers" type="number" value="0.3" step="0.1" min="0" max="1" style="width:80px"></div>
       <div><label>Max $/card (optional)</label><input id="rec-price" type="number" step="0.5" min="0" style="width:100px"></div>
+      <div><label>Build as</label><select id="rec-format"><option value="">deck's format</option><option>commander</option><option>modern</option><option>standard</option></select></div>
       <div><label>Type</label><select id="rec-type"><option value="">Any</option><option>Creature</option><option>Instant</option><option>Sorcery</option><option>Artifact</option><option>Enchantment</option><option>Planeswalker</option></select></div>
       <button onclick="recommend()">Recommend</button>
       <span class="spin" id="rec-spin">running…</span>
@@ -520,6 +521,7 @@ Deck
       <div><label>Save result as</label><input id="cmp-out" placeholder="finished" size="16"></div>
       <div><label>Bracket (1–5)</label><input id="cmp-bracket" type="number" value="3" min="1" max="5" style="width:70px"></div>
       <div><label>Max $/card (optional)</label><input id="cmp-price" type="number" step="0.5" min="0" style="width:100px"></div>
+      <div><label>Build as</label><select id="cmp-format"><option value="">deck's format</option><option>commander</option><option>modern</option><option>standard</option></select></div>
       <button onclick="completeDeck()">Complete</button>
       <span class="spin" id="cmp-spin">running…</span>
     </div>
@@ -1015,12 +1017,14 @@ async function recommend() {
                                  personalize: val("rec-pers") || "0.3"});
   if (val("rec-price")) p.set("max_price", val("rec-price"));
   if (val("rec-type")) p.set("type", val("rec-type"));
+  if (val("rec-format")) p.set("format", val("rec-format"));
   $("rec-spin").classList.add("show");
   await fetchSuggest(p, "rec-list");
   $("rec-spin").classList.remove("show");
 }
 async function completeDeck() {
   const args = ["complete", "--deck", val("cmp-deck"), "--bracket", val("cmp-bracket") || "3"];
+  if (val("cmp-format")) args.push("--format", val("cmp-format"));
   if (val("cmp-out")) args.push("-o", val("cmp-deck").replace(/\/[^/]+$/, "") + "/" + val("cmp-out") + ".json");
   if (val("cmp-price")) args.push("--max-card-price", val("cmp-price"));
   $("cmp-spin").classList.add("show");

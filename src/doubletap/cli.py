@@ -731,6 +731,12 @@ def recommend(
         help="Blend weight for neighbor-deck frequencies (0 = model only): "
         "cards common in corpus decks similar to yours rank higher",
     ),
+    deck_format: str = typer.Option(
+        None,
+        "--format",
+        "-f",
+        help="Treat the deck as this format (model + rules) without changing the file",
+    ),
     max_card_price: float = typer.Option(
         None,
         "--max-card-price",
@@ -744,7 +750,7 @@ def recommend(
 
     conn = db.connect()
     deck = decks.Deck.load(deck_path)
-    fmt = formats.get_format(deck.format)
+    fmt = formats.get_format(deck_format or deck.format)
     vocab, model, ckpt, model_path = _load_model(conn, fmt, model_path)
 
     # torch-backed imports after model resolution: a torch-less install gets
@@ -795,6 +801,12 @@ def complete(
         None, "--out", "-o", help="Write the completed deck as JSON"
     ),
     model_path: Path = typer.Option(None, "--model"),
+    deck_format: str = typer.Option(
+        None,
+        "--format",
+        "-f",
+        help="Treat the deck as this format (model + rules) without changing the file",
+    ),
     max_card_price: float = typer.Option(
         None,
         "--max-card-price",
@@ -822,7 +834,7 @@ def complete(
 
     conn = db.connect()
     deck = decks.Deck.load(deck_path)
-    fmt = formats.get_format(deck.format)
+    fmt = formats.get_format(deck_format or deck.format)
     vocab, model, ckpt, model_path = _load_model(conn, fmt, model_path)
 
     from .ml.eval import complete_deck

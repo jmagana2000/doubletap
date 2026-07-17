@@ -176,6 +176,7 @@ def suggest_cards(
     type_: str = "",
     personalize: float = 0.3,
     max_price: float | None = None,
+    fmt_override: str = "",
 ) -> dict:
     """Structured recommendations for the builder and Suggestions pages:
     top-k additions with scores and synergy rationale, optionally filtered
@@ -188,7 +189,7 @@ def suggest_cards(
 
     conn = db.connect()
     deck = decks.Deck.load(Path(path))
-    fmt = formats.get_format(deck.format)
+    fmt = formats.get_format(fmt_override or deck.format)
     vocab, model, ckpt, _model_path = _load_model(conn, fmt, None)
 
     from .ml.eval import score_state
@@ -387,6 +388,7 @@ class Handler(BaseHTTPRequestHandler):
                         max_price=float(qs["max_price"])
                         if qs.get("max_price")
                         else None,
+                        fmt_override=qs.get("format", ""),
                     ),
                 )
             except Exception as e:
