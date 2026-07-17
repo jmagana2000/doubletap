@@ -410,6 +410,7 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
       <div id="suggest-box">
         <div class="actions" style="margin-top:10px">
           <button data-cmd="recommend" onclick="loadSuggestions()">✦ Suggest</button>
+          <button class="ghost" data-cmd="deck swaps" onclick="loadSwaps()">⇄ Swaps</button>
           <span id="suggest-chips">
             <button class="chip on" data-st="">All</button>
             <button class="chip" data-st="Creature">Creature</button>
@@ -797,9 +798,42 @@ async function suggAdd(name) {
   if (res.exit_code !== 0) alert(res.output.trim());
   await suggCtx.refresh();
 }
+async function loadSwaps() {
+  if (!state.deck) return;
+  suggCtx = {path: state.deck.path, listId: "suggest-list",
+             refresh: async () => { await pickDeck(state.deck.path); loadDecks(); loadSwaps(); }};
+  $("suggest-list").innerHTML = `<div class="hint">Weighing every card… (a few seconds)</div>`;
+  const r = await fetch("/api/swaps?" + new URLSearchParams({path: state.deck.path, k: "5"}));
+  if (!r.ok) { $("suggest-list").innerHTML = `<div class="hint">No trained model for this format yet.</div>`; return; }
+  const d = await r.json();
+  $("suggest-list").innerHTML = d.swaps.map(s => `
+    <div class="sugg-row">
+      <span class="tl">− ${esc(s.cut)} → + ${esc(s.add)}<br><span style="color:var(--dim)">${esc(s.reason)}</span></span>
+      <button class="ghost" onclick='doPairSwap(${JSON.stringify(s.cut)}, ${JSON.stringify(s.add)})'>⇄ Go</button>
+    </div>`).join("") || `<div class="hint">No cuttable cards found.</div>`;
+}
+async function doPairSwap(cutName, addName) {
+  const cut = await run(["deck", "remove", suggCtx.path, cutName]);
+  if (cut.exit_code !== 0) { alert(cut.output.trim()); return; }
+  const add = await run(["deck", "add", suggCtx.path, addName]);
+  if (add.exit_code !== 0) alert(add.output.trim());
+  await suggCtx.refresh();
+}
+let cutOrderCache = null;
 async function startSwap(name) {
   const detail = await (await fetch("/api/deck?path=" + encodeURIComponent(suggCtx.path))).json();
-  const options = detail.cards
+  let cards = detail.cards;
+  try {
+    if (!cutOrderCache || cutOrderCache.path !== suggCtx.path) {
+      const r = await fetch("/api/swaps?" + new URLSearchParams({path: suggCtx.path, k: "1"}));
+      if (r.ok) cutOrderCache = {path: suggCtx.path, order: (await r.json()).cut_order};
+    }
+    if (cutOrderCache && cutOrderCache.order) {
+      const rank = new Map(cutOrderCache.order.map((n, i) => [n, i]));
+      cards = [...cards].sort((a, b) => (rank.get(a.name) ?? 999) - (rank.get(b.name) ?? 999));
+    }
+  } catch {}
+  const options = cards
     .map(c => `<option value=${JSON.stringify(c.name)}>${esc(c.name)}${c.qty > 1 ? ` (${c.qty})` : ""}</option>`)
     .join("");
   document.querySelectorAll(".swap-picker").forEach(e => e.remove());

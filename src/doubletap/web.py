@@ -231,6 +231,33 @@ def suggest_cards(
     }
 
 
+def swap_suggestions(path: str, k: int = 5) -> dict:
+    """Structured (cut, add, reason) pairs for the builder — the swaps CLI
+    as JSON, plus the full cut ranking so the swap picker can sort by it."""
+    from . import db, decks, formats, swaps
+    from .cli import _deck_to_idxs, _load_model
+    from .ml.reward import PMIModel
+
+    conn = db.connect()
+    deck = decks.Deck.load(Path(path))
+    fmt = formats.get_format(deck.format)
+    vocab, model, ckpt, _mp = _load_model(conn, fmt, None)
+    pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
+    pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
+    partial, commander_idx, partner_idx = _deck_to_idxs(conn, deck, vocab, fmt)
+    pairs = swaps.recommend_swaps(
+        conn, model, vocab, fmt, partial, commander_idx, partner_idx, pmi=pmi, k=k
+    )
+    cuts = swaps.rank_cuts(
+        conn, model, vocab, fmt, partial, commander_idx, partner_idx, pmi=pmi, k=99
+    )
+    return {
+        "model": ckpt["algo"],
+        "swaps": pairs,
+        "cut_order": [c.name for c in cuts],
+    }
+
+
 def deck_detail(path: str) -> dict:
     """One deck, structured for the builder: slots, per-card data, violations."""
     from . import db, decks, formats
@@ -341,6 +368,11 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/analysis":
             try:
                 self._send(200, deck_analysis(qs["path"]))
+            except Exception as e:
+                self._send(404, {"error": str(e)})
+        elif url.path == "/api/swaps":
+            try:
+                self._send(200, swap_suggestions(qs["path"], k=int(qs.get("k", "5"))))
             except Exception as e:
                 self._send(404, {"error": str(e)})
         elif url.path == "/api/suggest":

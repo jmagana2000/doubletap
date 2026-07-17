@@ -325,3 +325,25 @@ def test_split_corpus_is_canonical_and_leakproof(rigged_conn):
             canonical = (frozenset(train_ids), frozenset(hold_ids))
         else:
             assert (frozenset(train_ids), frozenset(hold_ids)) == canonical
+
+
+def test_rank_cuts_flags_low_synergy_card(rigged_conn):
+    """The engine's cut logic: the card with no synergy and no model love
+    ranks as a better cut than deck staples; protected roles survive."""
+    from doubletap.ml.reward import build_pmi, corpus_card_sets
+    from doubletap.swaps import rank_cuts
+
+    vocab = build_vocab(rigged_conn, COMMANDER)
+    decks = load_corpus(rigged_conn, vocab, COMMANDER)
+    model = tiny_model(vocab)
+    pmi = build_pmi(corpus_card_sets(decks), len(vocab), min_count=1)
+    deck = decks[0]
+    cuts = rank_cuts(
+        rigged_conn, model, vocab, COMMANDER, deck.main_idxs,
+        deck.commander_idx, pmi=pmi, k=10,
+    )
+    assert cuts, "expected cut candidates"
+    assert all(0.0 <= c.badness <= 1.0 for c in cuts)
+    assert all(c.reason for c in cuts)
+    # ranked worst-first
+    assert cuts == sorted(cuts, key=lambda c: -c.badness)

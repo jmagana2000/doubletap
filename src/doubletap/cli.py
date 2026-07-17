@@ -919,6 +919,62 @@ def _basic_land_split(pips, n_lands: int):
     return counts
 
 
+@deck_app.command("swaps")
+def deck_swaps(
+    name: str = typer.Argument(
+        ..., help="Deck file path or saved deck name (.json optional)"
+    ),
+    k: int = typer.Option(5, "-k", help="Number of swap pairs"),
+    max_card_price: float = typer.Option(
+        None, "--max-card-price", help="Budget cap on suggested additions"
+    ),
+):
+    """Recommend (cut, add) swap pairs: the deck's worst-fitting cards —
+    judged by the model's own score, PMI synergy, and role-quota surplus —
+    paired with the best additions, each with the reason for the cut."""
+    from . import swaps as swaps_mod
+
+    conn = db.connect()
+    path = _deck_path(name)
+    deck = decks.Deck.load(path)
+    fmt = formats.get_format(deck.format)
+    vocab, model, ckpt, _mp = _load_model(conn, fmt, None)
+
+    from .ml.reward import PMIModel
+
+    pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
+    pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
+    partial, commander_idx, partner_idx = _deck_to_idxs(conn, deck, vocab, fmt)
+    extra_mask = (
+        _budget_mask(conn, vocab, max_card_price)
+        if max_card_price is not None
+        else None
+    )
+    pairs = swaps_mod.recommend_swaps(
+        conn,
+        model,
+        vocab,
+        fmt,
+        partial,
+        commander_idx,
+        partner_idx,
+        pmi=pmi,
+        k=k,
+        extra_mask=extra_mask,
+    )
+    if not pairs:
+        typer.echo("No cuttable nonland cards found.")
+        raise typer.Exit()
+    typer.echo(f"Top {len(pairs)} swaps ({ckpt['algo']} model):")
+    for p in pairs:
+        typer.echo(f"  − {p['cut']}")
+        line = f"  + {p['add']}  ({p['add_score']})"
+        if p.get("add_synergy"):
+            line += "  with " + ", ".join(p["add_synergy"][:2])
+        typer.echo(line)
+        typer.echo(f"    why cut: {p['reason']}")
+
+
 @deck_app.command("format")
 def deck_format(
     name: str = typer.Argument(

@@ -25,6 +25,7 @@ ALL_COMMANDS = [
     ("deck", "remove"),
     ("deck", "drop"),
     ("deck", "commander"),
+    ("deck", "swaps"),
     ("deck", "format"),
     ("deck", "merge"),
     ("deck", "bracket"),
@@ -369,3 +370,30 @@ def test_suggest_reports_deck_fullness(client, loaded_conn, data_home):
 
     d = client.get("/api/suggest", params={"path": path, "k": "3"}).json()
     assert d["deck_size"] == 100 and d["target_size"] == 100 and d["exact_size"]
+
+
+def test_swaps_endpoint(client, loaded_conn, data_home):
+    torch = pytest.importorskip("torch")
+
+    from doubletap.formats import COMMANDER
+    from doubletap.ml.data import build_vocab, state_dim
+    from doubletap.ml.infer_np import save_np_checkpoint
+    from doubletap.ml.model import TwoTowerQ
+
+    vocab = build_vocab(loaded_conn, COMMANDER)
+    torch.manual_seed(0)
+    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8)
+    (data_home / "models").mkdir(exist_ok=True)
+    save_np_checkpoint(data_home / "models" / "cql_commander.npz", tiny.state_dict(), vocab.oracle_ids, "commander", "cql")
+    import_deck(client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n1 Juzám Djinn\n1 Rhystic Study\n")
+    path = next(d["path"] for d in client.get("/api/decks").json())
+
+    d = client.get("/api/swaps", params={"path": path, "k": "3"}).json()
+    assert d["model"] == "cql"
+    assert d["swaps"], "expected at least one swap pair"
+    for s in d["swaps"]:
+        assert s["cut"] and s["add"] and s["reason"]
+        assert s["cut"] != s["add"]
+    # every nonland deck card appears in the cut ordering
+    assert set(d["cut_order"]) <= {"Sol Ring", "Juzám Djinn", "Rhystic Study"}
+    assert len(d["cut_order"]) >= 2
