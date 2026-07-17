@@ -161,8 +161,27 @@ def is_land(card: dict) -> bool:
     return "Land" in card["type_line"].split("//")[0]
 
 
-def allows_any_number(card: dict) -> bool:
-    return "any number of cards named" in card.get("oracle_text", "")
+ANY_NUMBER = 1_000_000  # effectively unlimited, fits an int32 vocab array
+_NAMED_CAP_RE = re.compile(r"up to (\w+) cards named", re.IGNORECASE)
+_NUMBER_WORDS = {
+    "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+    "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+}  # fmt: skip
+
+
+def named_copy_cap(card: dict) -> int | None:
+    """Card-text override of the format copy limit (rule 903.5b exceptions):
+    "any number of cards named" (Relentless Rats) -> ANY_NUMBER; "up to
+    seven/nine cards named" (Seven Dwarves 7, Nazgûl 9) -> that number;
+    None -> the format's normal limit applies."""
+    text = card.get("oracle_text", "")
+    if "any number of cards named" in text:
+        return ANY_NUMBER
+    m = _NAMED_CAP_RE.search(text)
+    if m:
+        word = m.group(1).casefold()
+        return _NUMBER_WORDS.get(word) or (int(word) if word.isdigit() else None)
+    return None
 
 
 def can_be_commander(card: dict) -> bool:
@@ -420,15 +439,12 @@ def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
 
     for oid, qty in deck.entries.items():
         card = cards[oid]
-        if (
-            qty > fmt.copy_limit
-            and not is_basic_land(card)
-            and not allows_any_number(card)
-        ):
+        cap = named_copy_cap(card) or fmt.copy_limit
+        if qty > cap and not is_basic_land(card):
             violations.append(
                 Violation(
                     "too_many_copies",
-                    f"{qty}x {card['name']} exceeds the {fmt.copy_limit}-copy limit",
+                    f"{qty}x {card['name']} exceeds the {cap}-copy limit",
                     oid,
                 )
             )

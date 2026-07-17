@@ -182,7 +182,7 @@ def test_complete_deck_fills_nonland_slots_legally(rigged_conn):
     assert not vocab.land[np.array(added)].any()
     # copy limits respected across the greedy fill
     idxs, counts = np.unique(final, return_counts=True)
-    over = idxs[(counts > COMMANDER.copy_limit) & ~vocab.any_number[idxs]]
+    over = idxs[(counts > COMMANDER.copy_limit) & (vocab.copy_cap[idxs] == 0)]
     assert over.size == 0
     assert atraxa not in added
 

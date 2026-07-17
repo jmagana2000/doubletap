@@ -40,7 +40,7 @@ def test_vocab_flags(loaded_conn, vocab):
     rats = vidx(loaded_conn, vocab, "Relentless Rats")
     bolt = vidx(loaded_conn, vocab, "Lightning Bolt")
     assert vocab.land[swamp] and vocab.basic[swamp]
-    assert vocab.any_number[rats] and not vocab.any_number[bolt]
+    assert vocab.copy_cap[rats] > 0 and vocab.copy_cap[bolt] == 0
     assert vocab.identity_bits[bolt] == 1 << 3  # R is bit 3 of WUBRG
 
 
@@ -185,3 +185,11 @@ def test_card_features_fractional_sources(loaded_conn, vocab):
     # modern rejected mana-math features: base width unchanged
     modern_vocab = build_vocab(loaded_conn, MODERN)
     assert modern_vocab.features.shape[1] == feature_dim(MODERN) == BASE_FEATURE_DIM
+
+
+def test_action_mask_numeric_copy_caps(loaded_conn, vocab):
+    nazgul = vidx(loaded_conn, vocab, "Nazgûl")
+    eight = np.array([nazgul] * 8, dtype=np.int64)
+    nine = np.array([nazgul] * 9, dtype=np.int64)
+    assert action_mask(vocab, COMMANDER, eight, None)[nazgul]  # 9th is legal
+    assert not action_mask(vocab, COMMANDER, nine, None)[nazgul]  # 10th is not

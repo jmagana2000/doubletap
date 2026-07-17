@@ -68,7 +68,7 @@ def _tiny_vocab(land_flags, **over):
         identity_bits=np.zeros(n, dtype=np.uint8),
         land=land,
         basic=land.copy(),
-        any_number=np.zeros(n, dtype=bool),
+        copy_cap=np.zeros(n, dtype=np.int32),
         roles=np.zeros((n, 8), dtype=bool),
         eff_land=land.astype(np.float32),
         cheap_dr=np.zeros(n, dtype=bool),

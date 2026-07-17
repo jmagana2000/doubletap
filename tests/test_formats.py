@@ -314,3 +314,34 @@ def test_standard_format_config_and_validation(loaded_conn):
     bolt_deck.entries[bolt] = 1  # modern-legal, not standard-legal
     codes = {v.code for v in formats.validate(loaded_conn, bolt_deck)}
     assert codes & {"not_legal", "illegal"}
+
+
+def test_named_copy_caps(loaded_conn):
+    """Rule 903.5b card-text overrides: any-number, and the numeric caps
+    (Seven Dwarves 7, Nazgûl 9) that plain any-number matching missed."""
+    from doubletap import decks, formats
+    from doubletap.formats import ANY_NUMBER, named_copy_cap
+    from doubletap.names import lookup
+
+    def card(name):
+        return formats.get_card(loaded_conn, lookup(loaded_conn, name)[0].oracle_id)
+
+    assert named_copy_cap(card("Relentless Rats")) == ANY_NUMBER
+    assert named_copy_cap(card("Seven Dwarves")) == 7
+    assert named_copy_cap(card("Nazgûl")) == 9
+    assert named_copy_cap(card("Lightning Bolt")) is None
+
+    nazgul = lookup(loaded_conn, "Nazgûl")[0].oracle_id
+    deck = decks.Deck(format="commander")
+    deck.entries[nazgul] = 9  # legal: card text allows nine
+    codes = {v.code for v in formats.validate(loaded_conn, deck)}
+    assert "too_many_copies" not in codes
+    deck.entries[nazgul] = 10  # the cap still binds
+    codes = {v.code for v in formats.validate(loaded_conn, deck)}
+    assert "too_many_copies" in codes
+
+    dwarves = lookup(loaded_conn, "Seven Dwarves")[0].oracle_id
+    modern = decks.Deck(format="modern")
+    modern.entries[dwarves] = 7  # card text raises modern's 4-of to 7
+    codes = {v.code for v in formats.validate(loaded_conn, modern)}
+    assert "too_many_copies" not in codes

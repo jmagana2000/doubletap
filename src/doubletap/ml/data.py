@@ -11,7 +11,7 @@ from ..analysis import (
     is_cheap_draw_ramp,
     source_weights,
 )
-from ..formats import FormatConfig, allows_any_number, is_basic_land, is_land
+from ..formats import FormatConfig, is_basic_land, is_land, named_copy_cap
 
 COLOR_ORDER = "WUBRG"
 # functional roles carried as model features and used by the quota reward
@@ -91,7 +91,7 @@ class Vocab:
     identity_bits: np.ndarray  # (n,) uint8, WUBRG bitmask
     land: np.ndarray  # (n,) bool
     basic: np.ndarray  # (n,) bool
-    any_number: np.ndarray  # (n,) bool
+    copy_cap: np.ndarray  # (n,) int32 — card-text copy cap; 0 = format limit
     # strategy arrays (docs/rl-strategy-research.md): functional roles,
     # Karsten effective-land and fractional-source weights, colored pips
     roles: np.ndarray  # (n, 8) bool, ROLE_ORDER
@@ -117,7 +117,7 @@ def build_vocab(conn: sqlite3.Connection, fmt: FormatConfig) -> Vocab:
         bits.append(_identity_bits(card.get("color_identity") or []))
         land.append(is_land(card))
         basic.append(is_basic_land(card))
-        any_num.append(allows_any_number(card))
+        any_num.append(named_copy_cap(card) or 0)
         card_roles = classify(card)
         roles.append([r in card_roles for r in ROLE_ORDER])
         eff_land.append(effective_lands(card))
@@ -134,7 +134,7 @@ def build_vocab(conn: sqlite3.Connection, fmt: FormatConfig) -> Vocab:
         identity_bits=np.array(bits, dtype=np.uint8),
         land=np.array(land, dtype=bool),
         basic=np.array(basic, dtype=bool),
-        any_number=np.array(any_num, dtype=bool),
+        copy_cap=np.array(any_num, dtype=np.int32),
         roles=np.array(roles, dtype=bool),
         eff_land=np.array(eff_land, dtype=np.float32),
         cheap_dr=np.array(cheap_dr, dtype=bool),
@@ -156,8 +156,8 @@ def action_mask(
     mask = ~vocab.land
     if partial_idxs.size:
         idxs, counts = np.unique(partial_idxs, return_counts=True)
-        at_limit = idxs[(counts >= fmt.copy_limit) & ~vocab.any_number[idxs]]
-        mask[at_limit] = False
+        caps = np.where(vocab.copy_cap[idxs] > 0, vocab.copy_cap[idxs], fmt.copy_limit)
+        mask[idxs[counts >= caps]] = False
     if commander_idx is not None or partner_idx is not None:
         combined_bits = np.uint8(0)
         if commander_idx is not None:
