@@ -278,11 +278,13 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # quiet server
         pass
 
-    def _send(self, code, body, content_type="application/json"):
+    def _send(self, code, body, content_type="application/json", no_cache=False):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        if no_cache:
+            self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(data)
 
@@ -292,7 +294,14 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         qs = {k: v[0] for k, v in parse_qs(url.query).items()}
         if url.path in ("/", "/index.html"):
-            self._send(200, (STATIC / "index.html").read_bytes(), "text/html")
+            # no-cache: stale browser copies of the single-page UI have
+            # repeatedly hidden new features behind a silent cache hit
+            self._send(
+                200,
+                (STATIC / "index.html").read_bytes(),
+                "text/html",
+                no_cache=True,
+            )
         elif url.path == "/api/decks":
             self._send(200, list_decks())
         elif url.path == "/api/cards":
