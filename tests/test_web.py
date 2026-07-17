@@ -298,7 +298,7 @@ def test_duplicate_add_refused_in_commander(client):
 
 def test_suggest_endpoint_with_filters(client, loaded_conn, data_home):
     """The builder's Suggest panel: structured top-k with a type filter."""
-    import torch
+    torch = pytest.importorskip("torch")
 
     from doubletap.formats import COMMANDER
     from doubletap.ml.data import build_vocab, state_dim
@@ -328,7 +328,7 @@ def test_suggest_endpoint_with_filters(client, loaded_conn, data_home):
 
 
 def test_suggest_personalize_and_price_params(client, loaded_conn, data_home):
-    import torch
+    torch = pytest.importorskip("torch")
 
     from doubletap.formats import COMMANDER
     from doubletap.ml.data import build_vocab, state_dim
@@ -350,7 +350,7 @@ def test_suggest_personalize_and_price_params(client, loaded_conn, data_home):
 
 
 def test_suggest_reports_deck_fullness(client, loaded_conn, data_home):
-    import torch
+    torch = pytest.importorskip("torch")
 
     from doubletap.formats import COMMANDER
     from doubletap.ml.data import build_vocab, state_dim
