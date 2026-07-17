@@ -25,11 +25,16 @@ def _cards_for_norm(
     conn: sqlite3.Connection, name_norm: str, score: float
 ) -> list[Match]:
     # a face name can collide with another card's full name; return every card
-    # that carries this name, full-name matches before face matches
+    # that carries this name, full-name matches before face matches. Scryfall
+    # occasionally has two oracle records with the same name (playtest and
+    # promo variants) — break exact-name ties toward the record legal in the
+    # most formats, so resolution never lands on an unplayable twin
     rows = conn.execute(
         "SELECT c.oracle_id, c.name FROM card_names n"
         " JOIN cards c ON c.oracle_id = n.oracle_id"
-        " WHERE n.name_norm = ? ORDER BY c.name_norm != ?, c.name",
+        " WHERE n.name_norm = ? ORDER BY c.name_norm != ?,"
+        " (SELECT COUNT(*) FROM json_each(c.json, '$.legalities') je"
+        "  WHERE je.value = 'legal') DESC, c.name",
         (name_norm, name_norm),
     ).fetchall()
     return [Match(oracle_id, name, score) for oracle_id, name in rows]

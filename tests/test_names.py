@@ -49,3 +49,15 @@ def test_fuzzy_lookup_typo(loaded_conn):
 
 def test_empty_query(loaded_conn):
     assert lookup(loaded_conn, "   ") == []
+
+
+def test_duplicate_name_ties_prefer_playable_record(loaded_conn):
+    """Scryfall sometimes carries two oracle records with one name (playtest/
+    promo twins); exact-name resolution must land on the playable one."""
+    from doubletap.formats import get_card
+    from doubletap.names import lookup
+
+    matches = lookup(loaded_conn, "Twinned Test Mage")
+    assert len(matches) == 2 and matches[0].score == 100.0
+    top = get_card(loaded_conn, matches[0].oracle_id)
+    assert top["legalities"]["commander"] == "legal"
