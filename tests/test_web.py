@@ -31,6 +31,7 @@ ALL_COMMANDS = [
     ("deck", "price"),
     ("deck", "validate"),
     ("deck", "goldfish"),
+    ("deck", "manabase"),
     ("corpus", "crawl"),
     ("corpus", "stats"),
     ("corpus", "pmi"),

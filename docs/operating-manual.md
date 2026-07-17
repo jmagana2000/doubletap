@@ -234,6 +234,25 @@ poison/mill), market price. Heuristic — see `docs/gameplay-blindspots.md`.
 |---|---|---|
 | `PATH` | required | The deck JSON file to analyze |
 
+**`deck manabase NAME`** — recommend a complete mana base for the deck's
+spells: Karsten land count (curve regression), per-color source
+requirements (hypergeometric tables), real lands chosen greedily to cover
+the deficits (untapped preferred, identity/budget/bracket respected),
+basics filling the rest — then goldfished against an all-basics baseline
+so the value of the nonbasics is measured. Pure math, no ML.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `NAME` | required | Deck file path or saved deck name (`.json` optional) |
+| `--budget` | none | Max USD per land (strict: unpriced lands excluded) |
+| `--bracket` | 3 | ≤3 excludes Game Changer lands (Ancient Tomb, Gaea's Cradle, …) |
+| `--lands` | Karsten target | Override the land count |
+| `--goldfish/--no-goldfish` | on | Simulate recommended vs all-basics |
+| `--apply` | off | Replace the deck's lands with the recommendation |
+
+Known v1 ceiling: conditionally-restricted producers (Ancient Ziggurat)
+are valued at face; check the list before sleeving.
+
 **`deck goldfish PATH`** — solitaire simulation of how the deck actually
 plays: shuffle, mulligan (Karsten's model), play lands, cast greedily.
 Reports a 0–1 goldfish score plus mana efficiency, curve-out rate, dead

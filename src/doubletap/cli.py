@@ -1031,6 +1031,98 @@ def _all_entries(deck):
     return entries
 
 
+@deck_app.command("manabase")
+def deck_manabase(
+    name: str = typer.Argument(
+        ..., help="Deck file path or saved deck name (.json optional)"
+    ),
+    budget: float = typer.Option(
+        None, "--budget", help="Max USD per land (strict: unpriced lands excluded)"
+    ),
+    bracket: int = typer.Option(
+        3, "--bracket", min=1, max=5, help="≤3 excludes Game Changer lands"
+    ),
+    lands: int = typer.Option(
+        None, "--lands", help="Override the land count (default: Karsten target)"
+    ),
+    goldfish: bool = typer.Option(
+        True,
+        "--goldfish/--no-goldfish",
+        help="Simulate the recommended base vs all-basics",
+    ),
+    apply: bool = typer.Option(
+        False, "--apply", help="Replace the deck's lands with the recommendation"
+    ),
+):
+    """Recommend a complete mana base for the deck's spells: Karsten land
+    count, per-color source requirements, real lands chosen to cover the
+    deficits (untapped preferred), basics filling the rest — validated by
+    the goldfish simulator against an all-basics baseline."""
+    from . import manabase
+
+    conn = db.connect()
+    path = _deck_path(name)
+    deck = decks.Deck.load(path)
+    fmt = formats.get_format(deck.format)
+
+    result = manabase.recommend_manabase(
+        conn,
+        dict(deck.entries),
+        fmt,
+        commander_oid=deck.commander,
+        land_count=lands,
+        budget=budget,
+        bracket=bracket,
+    )
+    typer.echo(
+        f"Recommended mana base: {result.land_count} lands"
+        f" (Karsten target {result.karsten_target})"
+    )
+    for land_name, qty, colors, tapped, price in result.lands:
+        tags = " ".join(
+            t
+            for t in (
+                colors,
+                "tapped" if tapped else "",
+                f"${price:.2f}" if price else "",
+            )
+            if t
+        )
+        typer.echo(f"  {qty}x {land_name:<34} {tags}")
+    for basic, qty in sorted(result.basics.items()):
+        typer.echo(f"  {qty}x {basic}")
+    typer.echo("Colored sources (achieved / Karsten needed):")
+    for c in "WUBRG":
+        if c in result.needed:
+            typer.echo(f"  {c}: {result.achieved.get(c, 0)} / {result.needed[c]}")
+    for note in result.notes:
+        typer.echo(f"note: {note}")
+
+    if goldfish:
+        cmp = manabase.goldfish_compare(
+            conn, dict(deck.entries), result, deck.commander
+        )
+        r, b = cmp["recommended"], cmp["all_basics"]
+        typer.echo(
+            f"Goldfish: recommended {r['score']:.3f} vs all-basics {b['score']:.3f}"
+            f"  (dead turns {r['dead_turn_rate']:.1%} vs {b['dead_turn_rate']:.1%})"
+        )
+
+    if apply:
+        from .names import lookup as name_lookup
+
+        for oid in [
+            o for o in deck.entries if formats.is_land(formats.get_card(conn, o))
+        ]:
+            del deck.entries[oid]
+        for land_name, qty, *_ in result.lands:
+            deck.entries[name_lookup(conn, land_name)[0].oracle_id] += qty
+        for basic, qty in result.basics.items():
+            deck.entries[name_lookup(conn, basic)[0].oracle_id] += qty
+        deck.save(conn, path)
+        typer.echo(f"Applied: wrote {deck.size()}-card deck to {path.name}")
+
+
 @deck_app.command("analyze")
 def deck_analyze(path: Path = typer.Argument(..., exists=True, readable=True)):
     """How does this deck function and win? Roles vs Commander targets, mana
