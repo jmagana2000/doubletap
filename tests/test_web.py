@@ -448,3 +448,41 @@ def test_suggest_format_override(client, loaded_conn, data_home):
     assert r.status_code == 200, r.text
     d = r.json()
     assert d["model"] == "bc" and d["suggestions"]
+
+
+def test_complete_format_override_via_run(client, loaded_conn, data_home):
+    """The Auto-complete panel's 'Build as' dropdown posts exactly this."""
+    torch = pytest.importorskip("torch")
+
+    from doubletap.formats import COMMANDER, MODERN
+    from doubletap.ml.data import build_vocab, state_dim
+    from doubletap.ml.infer_np import save_np_checkpoint
+    from doubletap.ml.model import TwoTowerQ
+
+    (data_home / "models").mkdir(exist_ok=True)
+    for fmt, name in ((MODERN, "bc_modern.npz"), (COMMANDER, "bc_commander.npz")):
+        vocab = build_vocab(loaded_conn, fmt)
+        torch.manual_seed(0)
+        tiny = TwoTowerQ(vocab.features, state_dim=state_dim(fmt), emb_dim=8, hidden=16, out_dim=8)
+        save_np_checkpoint(data_home / "models" / name, tiny.state_dict(), vocab.oracle_ids, fmt.name, "bc")
+
+    import_deck(client, "4 Lightning Bolt\n")  # saved as a commander-format pile
+    path = next(d["path"] for d in client.get("/api/decks").json())
+
+    # the exact arg list completeDeck() builds with "Build as: modern"
+    out = run(client, ["complete", "--deck", path, "--bracket", "3", "--format", "modern"])
+    assert out["exit_code"] == 0, out["output"]
+    assert "Added" in out["output"]
+
+    # recommend's --format through the same channel
+    out = run(client, ["recommend", "--deck", path, "-k", "2", "--format", "modern"])
+    assert out["exit_code"] == 0, out["output"]
+    assert "Top 2 additions" in out["output"]
+
+
+def test_ui_passes_format_args():
+    """The panels actually send --format / format= — pin the wiring."""
+    html = (web.STATIC / "index.html").read_text()
+    assert 'args.push("--format", val("cmp-format"))' in html
+    assert 'p.set("format", val("rec-format"))' in html
+    assert 'id="cmp-format"' in html and 'id="rec-format"' in html
