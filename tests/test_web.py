@@ -25,6 +25,7 @@ ALL_COMMANDS = [
     ("deck", "remove"),
     ("deck", "drop"),
     ("deck", "commander"),
+    ("deck", "format"),
     ("deck", "merge"),
     ("deck", "bracket"),
     ("deck", "analyze"),

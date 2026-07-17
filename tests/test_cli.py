@@ -419,3 +419,30 @@ def test_basic_land_split():
     assert counts[0] >= counts[3]  # more W pips than R pips
     # colorless deck: even split
     assert _basic_land_split(np.zeros(5), 10).sum() == 10
+
+
+def test_deck_format_show_and_convert(loaded_conn, tmp_path):
+    from doubletap.decks import Deck
+
+    out = import_deck(tmp_path)  # commander deck with Atraxa as commander
+
+    result = runner.invoke(app, ["deck", "format", str(out)])
+    assert result.exit_code == 0 and "commander" in result.output
+
+    # commander -> modern: commander moves into the main deck
+    result = runner.invoke(app, ["deck", "format", str(out), "modern"])
+    assert result.exit_code == 0, result.output
+    assert "now modern" in result.output
+    assert "moved from the command zone" in result.output
+    deck = Deck.load(out)
+    assert deck.format == "modern" and deck.commander is None
+    assert deck.entries[oid(loaded_conn, "Atraxa, Praetors' Voice")] == 1
+
+    # modern -> commander: no commander auto-set; validation reports it
+    result = runner.invoke(app, ["deck", "format", str(out), "commander"])
+    assert result.exit_code == 0
+    assert "need a commander" in result.output
+    assert Deck.load(out).format == "commander"
+
+    result = runner.invoke(app, ["deck", "format", str(out), "vintage"])
+    assert result.exit_code != 0 or "Unknown format" in str(result.exception)

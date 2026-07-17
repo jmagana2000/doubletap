@@ -919,6 +919,52 @@ def _basic_land_split(pips, n_lands: int):
     return counts
 
 
+@deck_app.command("format")
+def deck_format(
+    name: str = typer.Argument(
+        ..., help="Deck file path or saved deck name (.json optional)"
+    ),
+    new_format: str = typer.Argument(
+        None, help="Target format (commander, modern, standard); omit to show"
+    ),
+):
+    """Show or change a saved deck's format. Converting away from commander
+    moves the commander (and partner) into the main deck; converting to
+    commander leaves the commander unset — pick one with deck commander.
+    The deck is re-validated against the new format's rules."""
+    conn = db.connect()
+    path = _deck_path(name)
+    deck = decks.Deck.load(path)
+
+    if new_format is None:
+        typer.echo(f"{path.stem}: {deck.format}")
+        return
+
+    fmt = formats.get_format(new_format)  # validates the name
+    if fmt.name == deck.format:
+        typer.echo(f"Already {fmt.name}.")
+        return
+    moved = []
+    if not fmt.requires_commander:
+        for oid in (deck.commander, deck.partner):
+            if oid:
+                deck.entries[oid] += 1
+                moved.append(_card_name_by_oid(conn, oid))
+        deck.commander = deck.partner = None
+    deck.format = fmt.name
+    deck.save(conn, path)
+    typer.echo(f"{path.stem}: now {fmt.name}")
+    for n in moved:
+        typer.echo(f"note: {n} moved from the command zone into the main deck")
+    violations = [v for v in formats.validate(conn, deck)]
+    if violations:
+        typer.echo(f"{len(violations)} rule issue(s) under {fmt.name}:")
+        for v in violations:
+            typer.echo(f"  {v.message}")
+    else:
+        typer.echo("Valid — no violations.")
+
+
 @deck_app.command("merge")
 def deck_merge(
     paths: list[Path] = typer.Argument(..., help="Deck JSON files to merge"),

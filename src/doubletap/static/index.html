@@ -403,6 +403,7 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
         <button class="ghost" data-cmd="deck price"    onclick="shelfAction('price')">Price</button>
       <button class="ghost" data-cmd="deck goldfish" onclick="shelfAction('goldfish')">Goldfish</button>
       <button class="ghost" data-cmd="deck manabase" onclick="shelfAction('manabase')">Manabase</button>
+      <button class="ghost" data-cmd="deck format" onclick="changeFormat()">Format</button>
       <button class="ghost" data-cmd="deck drop" onclick="dropDeck()" style="color:#e06c75">Drop</button>
       </div>
       <pre class="out" id="shelf-out"></pre>
@@ -817,6 +818,18 @@ async function doSwap(addName) {
   const add = await run(["deck", "add", suggCtx.path, addName]);
   if (add.exit_code !== 0) alert(add.output.trim());
   await suggCtx.refresh();
+}
+async function changeFormat() {
+  if (!state.deck) return;
+  const target = prompt(
+    `Convert ${state.deck.name} (${state.deck.format}) to which format?\ncommander / modern / standard`,
+    state.deck.format === "commander" ? "modern" : "commander");
+  if (!target || target === state.deck.format) return;
+  const res = await run(["deck", "format", state.deck.path, target.trim()]);
+  if (res.exit_code !== 0) { alert(res.output.trim()); return; }
+  if (res.output.includes("note:") || res.output.includes("issue")) alert(res.output.trim());
+  await pickDeck(state.deck.path);
+  loadDecks();
 }
 async function dropDeck() {
   if (!state.deck) return;
