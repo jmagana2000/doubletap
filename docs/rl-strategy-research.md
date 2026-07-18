@@ -316,6 +316,35 @@ marginal (+0.0006, within noise) but recovery improved across every k —
 the keep decision rests on recovery, with structural merely not
 regressing.
 
+## Results (2026-07-18) — five-source code review, remediation, and honest-metric re-baseline
+
+A five-source correctness review (four fresh-context agents + opencode/
+big-pickle as an external validator; Codex quota-blocked) produced 24
+confirmed findings and 1 refuted one — every finding verified against
+the code before acceptance, and opencode independently audited the
+fixes 16/16 PRESENT+CORRECT afterward. Full fix list in commit 9a47b47.
+
+Three of the fixes changed *measurement itself*: recovery@k previously
+let 4-of formats "recover" hidden cards whose other copies were still
+visible (massive inflation — modern's honest recovery is ~33, not ~48);
+structural_quality judged standard against commander's colored-source
+table (standard's honest structural is 0.59, not 0.48); and the goldfish
+sim never consumed colored capacity within a turn. Re-baselined
+champions on the corrected metrics:
+
+| format | BC@50 | CQL@50 | delta (bar +2) | default | structural | goldfish |
+|---|---|---|---|---|---|---|
+| commander | 21.43 | **23.70** | +2.27 ✓ | **CQL** | 0.7562 | 0.5218 |
+| modern | **32.10** | 33.68 | +1.58 ✗ | **BC** | 0.5144 | 0.4929 |
+| standard | 38.39 | **44.78** | +6.39 ✓ | **CQL** | 0.5925 | 0.5716 |
+
+Two verdicts flipped again, and the pattern is instructive: commander's
+CQL re-earned its crown (+2.27) once duplicate noise was gone, while
+modern's CQL lost its margin (+1.58) once visible-copy recovery stopped
+counting — its old edge lived partly in the inflated metric. Standard's
+CQL is emphatic at +6.39. These are the keep-bar baselines going
+forward; every number above this section is superseded.
+
 ## Results (2026-07-17) — leakage check: two channels found, split rebuilt
 
 The external review's leakage warning (near-duplicate public decks
