@@ -389,17 +389,23 @@ def test_recovery_hides_every_copy(rigged_conn):
 
     from doubletap.ml.policy import recovery_at_k
 
-    recovery_at_k(SpyModel(), decks[:3], vocab, COMMANDER, n_hide=4,
-                  rng=np.random.default_rng(0))
-    # rigged decks run 20x Relentless Rats: whenever Rats was hidden, no
-    # copy of it may appear in the partial the model scored
-    rats_idx = None
-    for deck in decks[:3]:
-        vals, counts = np.unique(deck.main_idxs, return_counts=True)
-        rats_idx = int(vals[np.argmax(counts)])
-    for partial in seen_partials:
-        present = set(np.unique(partial))
-        full = set(np.unique(decks[0].main_idxs))
-        hidden_here = full - present
-        for h in hidden_here:
-            assert h not in present
+    recovery_at_k(
+        SpyModel(),
+        decks[:3],
+        vocab,
+        COMMANDER,
+        n_hide=4,
+        rng=np.random.default_rng(0),
+    )
+    assert seen_partials
+    # all-or-nothing: every card is either fully present (all copies) or
+    # fully hidden — a partially hidden 20x Relentless Rats stack would
+    # leave visible copies the model could trivially "recover"
+    for deck, partial in zip(decks[:3], seen_partials):
+        orig_vals, orig_counts = np.unique(deck.main_idxs, return_counts=True)
+        part_counts = {
+            int(v): int(c)
+            for v, c in zip(*np.unique(partial, return_counts=True))
+        }
+        for v, c in zip(orig_vals, orig_counts):
+            assert part_counts.get(int(v), 0) in (0, int(c))
