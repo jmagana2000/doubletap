@@ -62,6 +62,12 @@ def split_corpus(decks: list[CorpusDeck], holdout_fraction: float = 0.1, seed: i
         count += int((clusters == cid).sum())
     holdout = [d for d, c in zip(decks, clusters) if c in holdout_clusters]
     train = [d for d, c in zip(decks, clusters) if c not in holdout_clusters]
+    if not holdout or not train:
+        raise RuntimeError(
+            "corpus too homogeneous to split: near-duplicate clustering left"
+            f" {len(train)} train / {len(holdout)} holdout decks — crawl more"
+            " varied decks before training"
+        )
     return train, holdout
 
 

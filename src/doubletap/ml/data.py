@@ -213,17 +213,23 @@ def load_corpus(
 ) -> list[CorpusDeck]:
     decks = []
     rows = conn.execute(
-        "SELECT deck_id, commander_oracle_id, partner_oracle_id FROM decks WHERE status = 'parsed' AND format = ?",
+        "SELECT deck_id, commander_oracle_id, partner_oracle_id FROM decks WHERE status = 'parsed' AND format = ? ORDER BY deck_id",
         (fmt.name,),
     ).fetchall()
     for deck_id, commander_oid, partner_oid in rows:
         commander_idx = vocab.index.get(commander_oid) if commander_oid else None
         partner_idx = vocab.index.get(partner_oid) if partner_oid else None
+        if (commander_oid and commander_idx is None) or (
+            partner_oid and partner_idx is None
+        ):
+            continue  # commander left the vocab (ban/rotation): drop the deck,
+            # matching how main-deck cards are handled below
         commander_oids = {o for o in (commander_oid, partner_oid) if o}
         main = []
         ok = True
         for oid, qty in conn.execute(
-            "SELECT oracle_id, qty FROM deck_cards WHERE deck_id = ?", (deck_id,)
+            "SELECT oracle_id, qty FROM deck_cards WHERE deck_id = ? ORDER BY oracle_id",
+            (deck_id,)
         ):
             if oid in commander_oids:
                 continue
@@ -273,7 +279,13 @@ def sample_batch(
 ) -> Batch:
     bags, offsets, sf, nsf, actions, commanders, dones = [], [], [], [], [], [], []
     offset = 0
+    futile = 0
     while len(actions) < batch_size:
+        if futile > 50 * batch_size:
+            raise RuntimeError(
+                "sample_batch cannot find nonland transitions — corpus decks"
+                " have no nonland cards"
+            )
         deck = decks[rng.integers(len(decks))]
         n = deck.main_idxs.size
         perm = rng.permutation(n)
@@ -281,6 +293,7 @@ def sample_batch(
         k = int(rng.integers(0, n))
         remaining_nonland = perm[k:][~vocab.land[deck.main_idxs[perm[k:]]]]
         if remaining_nonland.size == 0:
+            futile += 1
             continue
         target_pos = remaining_nonland[rng.integers(remaining_nonland.size)]
         partial = deck.main_idxs[perm[:k]]

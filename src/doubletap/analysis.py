@@ -145,6 +145,7 @@ def classify(card: dict) -> set[str]:
 # colored sources needed for a card with N pips of one color to be
 # "consistently castable" ((89+MV)% on curve)
 SOURCES_NEEDED = {
+    "standard": {1: 14, 2: 21, 3: 23},
     "commander": {1: 19, 2: 30, 3: 36},
     "modern": {1: 14, 2: 21, 3: 23},
 }
@@ -242,11 +243,19 @@ _LAND_TO_BATTLEFIELD_RE = re.compile(
 def etb_tapped(card: dict) -> bool:
     """Unconditionally enters tapped. Conditional lands (check/fast/reveal)
     are treated as untapped — ponytail: optimistic v1, model conditions if
-    calibration demands it."""
-    text = _oracle_text(card)
-    if "unless" in text.casefold() or "you may" in text.casefold():
-        return False
-    return bool(_ETB_TAPPED_RE.search(text))
+    calibration demands it. Judged per face: a spell//land MDFC's land face
+    is read on its own text, so the spell face's "you may" can't mask an
+    unconditional tapped clause."""
+    faces = card.get("card_faces") or [card]
+    for face in faces:
+        if "Land" not in (face.get("type_line") or card.get("type_line", "")):
+            continue
+        text = face.get("oracle_text") or ""
+        if "unless" in text.casefold() or "you may" in text.casefold():
+            continue
+        if _ETB_TAPPED_RE.search(text):
+            return True
+    return False
 
 
 def mana_production(card: dict) -> tuple[list[str], int]:

@@ -259,6 +259,19 @@ def swap_suggestions(path: str, k: int = 5) -> dict:
     }
 
 
+
+def _deck_path_arg(raw: str) -> str:
+    """Confine GET deck-path params to the decks directory (defense in
+    depth — the API is localhost-only, but there is no reason these
+    endpoints should read arbitrary files)."""
+    from . import db
+
+    path = Path(raw).resolve()
+    decks_root = db.decks_dir().resolve()
+    if not (path == decks_root or decks_root in path.parents):
+        raise ValueError("path is outside the decks directory")
+    return str(path)
+
 def deck_detail(path: str) -> dict:
     """One deck, structured for the builder: slots, per-card data, violations."""
     from . import db, decks, formats
@@ -363,17 +376,17 @@ class Handler(BaseHTTPRequestHandler):
             )
         elif url.path == "/api/deck":
             try:
-                self._send(200, deck_detail(qs["path"]))
+                self._send(200, deck_detail(_deck_path_arg(qs["path"])))
             except Exception as e:
                 self._send(404, {"error": str(e)})
         elif url.path == "/api/analysis":
             try:
-                self._send(200, deck_analysis(qs["path"]))
+                self._send(200, deck_analysis(_deck_path_arg(qs["path"])))
             except Exception as e:
                 self._send(404, {"error": str(e)})
         elif url.path == "/api/swaps":
             try:
-                self._send(200, swap_suggestions(qs["path"], k=int(qs.get("k", "5"))))
+                self._send(200, swap_suggestions(_deck_path_arg(qs["path"]), k=int(qs.get("k", "5"))))
             except Exception as e:
                 self._send(404, {"error": str(e)})
         elif url.path == "/api/suggest":
@@ -381,7 +394,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(
                     200,
                     suggest_cards(
-                        qs["path"],
+                        _deck_path_arg(qs["path"]),
                         k=int(qs.get("k", "12")),
                         type_=qs.get("type", ""),
                         personalize=float(qs.get("personalize", "0.3")),

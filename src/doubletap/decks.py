@@ -143,10 +143,8 @@ def parse_text_lines(lines: list[str]) -> list[ParsedLine]:
             continue
         is_commander = section in _COMMANDER_SECTIONS
         is_companion = section in _COMPANION_SECTIONS
-        if (
-            _MARKER_RE.search(line)
-            and "cmdr" in _MARKER_RE.search(line).group(1).casefold()
-        ):
+        # a line can carry several markers (foil commanders: "*F* *CMDR*")
+        if any("cmdr" in m.group(1).casefold() for m in _MARKER_RE.finditer(line)):
             is_commander = True
         line = _MARKER_RE.sub(" ", line).strip()
         line = _SET_TAIL_RE.sub("", line)
@@ -177,13 +175,29 @@ def parse_csv(path: Path) -> list[ParsedLine]:
             raise ValueError(
                 f"CSV needs a count/quantity column and a name column, got: {reader.fieldnames}"
             )
-        return [
-            ParsedLine(
-                raw=row[name_col], qty=int(row[qty_col] or 1), name=row[name_col]
+        category_col = next(
+            (cols[k] for k in ("category", "board", "section") if k in cols), None
+        )
+        out = []
+        for row in reader:
+            name = (row.get(name_col) or "").strip()  # short rows fill None
+            if not name:
+                continue
+            category = (
+                (row.get(category_col) or "").strip().casefold() if category_col else ""
             )
-            for row in reader
-            if row.get(name_col, "").strip()
-        ]
+            if category in _SKIPPED_SECTIONS:
+                continue
+            out.append(
+                ParsedLine(
+                    raw=name,
+                    qty=int(row.get(qty_col) or 1),
+                    name=name,
+                    is_commander=category in _COMMANDER_SECTIONS,
+                    is_companion=category in _COMPANION_SECTIONS,
+                )
+            )
+        return out
 
 
 def resolve(
@@ -227,13 +241,25 @@ def resolve(
 
         buckets[status].append(LineResult(line, status, matches))
         if status in ("resolved", "assumed"):
-            if line.is_commander:
+            # command-zone slots only exist in commander; elsewhere a *CMDR*
+            # marker is just a main-deck card (and gets legality-checked).
+            # local import: formats imports Deck from this module
+            from .formats import get_format
+
+            uses_zone = get_format(deck_format).requires_commander
+            if line.is_commander and uses_zone:
                 if result.deck.commander is None:
                     result.deck.commander = matches[0].oracle_id
-                else:
+                elif result.deck.partner is None:
                     result.deck.partner = matches[0].oracle_id
-            elif line.is_companion:
-                result.deck.companion = matches[0].oracle_id
+                else:
+                    # a third commander line is a malformed list, not a silent drop
+                    buckets["ambiguous"].append(LineResult(line, "ambiguous", matches))
+            elif line.is_companion:  # companions exist in every format
+                if result.deck.companion is None:
+                    result.deck.companion = matches[0].oracle_id
+                else:
+                    buckets["ambiguous"].append(LineResult(line, "ambiguous", matches))
             else:
                 result.deck.entries[matches[0].oracle_id] += line.qty
     return result
@@ -270,12 +296,16 @@ def load_lines(path: Path) -> list[ParsedLine]:
         texts = [text for text, _ in lines_with_conf]
 
         # Decklist screenshots have quantity-prefixed lines ("4 Lightning Bolt").
-        # Physical card photos don't — extract just the card name from the first
-        # OCR line that passes the name heuristic.
+        # Physical card photos don't — but a decklist without quantities is a
+        # list of MANY name-like lines; only collapse to a single card when the
+        # image really looks like one card, else parse every line as qty 1.
         if not any(_QTY_RE.match(t) for t in texts):
-            for text, _conf in lines_with_conf:
-                if _looks_like_card_name(text):
-                    return [ParsedLine(raw=text, qty=1, name=text)]
+            name_lines = [
+                text for text, _conf in lines_with_conf if _looks_like_card_name(text)
+            ]
+            if len(name_lines) <= 3:  # physical card photo: title + noise
+                return [ParsedLine(raw=t, qty=1, name=t) for t in name_lines[:1]]
+            return [ParsedLine(raw=t, qty=1, name=t) for t in name_lines]
 
         return parse_text_lines(texts)
     return parse_text_lines(path.read_text(encoding="utf-8").splitlines())

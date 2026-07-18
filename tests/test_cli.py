@@ -296,8 +296,18 @@ def test_deck_validate_valid_deck(loaded_conn, tmp_path):
 
 
 def _rigged_corpus(conn):
-    # train_bc refuses to run on fewer than 20 parsed decks
+    # train_bc refuses to run on fewer than 20 parsed decks; rotating
+    # fillers keep the decks below the near-duplicate clustering threshold
+    fillers = [
+        "Standard Strike",
+        "Rhystic Study",
+        "Twinned Test Mage",
+        "Seven Dwarves",
+        "Nazgûl",
+    ]
     for deck_id in range(1, 21):
+        f1 = fillers[deck_id % len(fillers)]
+        f2 = fillers[(deck_id + 2) % len(fillers)]
         _insert_corpus_deck(
             conn,
             deck_id,
@@ -306,7 +316,9 @@ def _rigged_corpus(conn):
                 oid(conn, "Sol Ring"): 1,
                 oid(conn, "Relentless Rats"): 20,
                 oid(conn, "Juzám Djinn"): 1,
-                oid(conn, "Swamp"): 77,
+                oid(conn, f1): 1,
+                oid(conn, f2): 1,
+                oid(conn, "Swamp"): 75,
             },
             commander_oid=oid(conn, "Atraxa, Praetors' Voice"),
         )

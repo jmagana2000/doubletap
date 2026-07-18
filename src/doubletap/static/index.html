@@ -719,8 +719,8 @@ function renderShelf(d) {
         <span class="q">${c.qty}</span><span class="nm">${esc(c.name)}</span>
         <span>${manaPips(c.mana_cost)}</span>
         <span class="step">
-          <button data-cmd="deck add" onclick='event.stopPropagation();mutate("add",${JSON.stringify(c.name)})'>+</button>
-          <button data-cmd="deck remove" onclick='event.stopPropagation();mutate("remove",${JSON.stringify(c.name)})'>−</button>
+          <button data-cmd="deck add" onclick='event.stopPropagation();mutate("add",${JSON.stringify(c.name).replace(/'/g,"&#39;")})'>+</button>
+          <button data-cmd="deck remove" onclick='event.stopPropagation();mutate("remove",${JSON.stringify(c.name).replace(/'/g,"&#39;")})'>−</button>
         </span></div>`;
     }
   }
@@ -776,8 +776,8 @@ function suggRows(d, listId) {
       <a onclick='openModal(${JSON.stringify(c).replace(/'/g,"&#39;")})'>${esc(c.name)}</a>
       <span class="tl">${manaPips(c.mana_cost)} · ${c.score.toFixed(3)}${c.price != null ? ` · $${c.price.toFixed(2)}` : ""}${c.synergy && c.synergy.length ? " · with " + esc(c.synergy.slice(0,2).join(", ")) : ""}</span>
       <span>
-        ${suggCtx.full ? "" : `<button class="ghost" onclick='suggAdd(${JSON.stringify(c.name)})'>+ Add</button>`}
-        <button class="ghost" onclick='startSwap(${JSON.stringify(c.name)})'>⇄ Swap</button>
+        ${suggCtx.full ? "" : `<button class="ghost" onclick='suggAdd(${JSON.stringify(c.name).replace(/'/g,"&#39;")})'>+ Add</button>`}
+        <button class="ghost" onclick='startSwap(${JSON.stringify(c.name).replace(/'/g,"&#39;")})'>⇄ Swap</button>
       </span>
     </div>`).join("") || `<div class="hint">Nothing legal matches those filters.</div>`);
 }
@@ -811,7 +811,7 @@ async function loadSwaps() {
   $("suggest-list").innerHTML = d.swaps.map(s => `
     <div class="sugg-row">
       <span class="tl">− ${esc(s.cut)} → + ${esc(s.add)} <b>Δ ${s.delta > 0 ? "+" : ""}${s.delta.toFixed(3)}</b><br><span style="color:var(--dim)">${esc(s.reason)}</span></span>
-      <button class="ghost" onclick='doPairSwap(${JSON.stringify(s.cut)}, ${JSON.stringify(s.add)})'>⇄ Go</button>
+      <button class="ghost" onclick='doPairSwap(${JSON.stringify(s.cut).replace(/'/g,"&#39;")}, ${JSON.stringify(s.add).replace(/'/g,"&#39;")})'>⇄ Go</button>
     </div>`).join("") || `<div class="hint">No cuttable cards found.</div>`;
 }
 async function doPairSwap(cutName, addName) {
@@ -836,14 +836,14 @@ async function startSwap(name) {
     }
   } catch {}
   const options = cards
-    .map(c => `<option value=${JSON.stringify(c.name)}>${esc(c.name)}${c.qty > 1 ? ` (${c.qty})` : ""}</option>`)
+    .map(c => `<option value=${JSON.stringify(c.name).replace(/'/g,"&#39;")}>${esc(c.name)}${c.qty > 1 ? ` (${c.qty})` : ""}</option>`)
     .join("");
   document.querySelectorAll(".swap-picker").forEach(e => e.remove());
   const div = document.createElement("div");
   div.className = "swap-picker";
   div.innerHTML = `Swap in <b>${esc(name)}</b> for
     <select id="swap-out">${options}</select>
-    <button class="ghost" onclick='doSwap(${JSON.stringify(name)})'>Go</button>
+    <button class="ghost" onclick='doSwap(${JSON.stringify(name).replace(/'/g,"&#39;")})'>Go</button>
     <button class="ghost" onclick='this.parentElement.remove()'>✕</button>`;
   $(suggCtx.listId).prepend(div);
 }
@@ -949,11 +949,11 @@ function openModal(c) {
   $("modal-text").textContent = c.oracle_text || "(no rules text)";
   const inDeck = state.deck && state.deck.cards.find(x => x.name === c.name);
   $("modal-actions").innerHTML = state.deck ? `
-    <button onclick='mutateFromModal("add", ${JSON.stringify(c.name)})'>Add to ${esc(state.deck.name)}</button>
-    ${inDeck ? `<button class="ghost" onclick='mutateFromModal("remove", ${JSON.stringify(c.name)})'>Remove (${inDeck.qty} in deck)</button>` : ""}
-    ${state.deck.format === "commander" && /Legendary/.test(c.type_line) && /Creature/.test(c.type_line) && (!state.deck.commander || state.deck.commander.name !== c.name) ? `<button class="ghost" onclick='commanderFromModal(${JSON.stringify(c.name)})'>⚔ Set commander</button>` : ""}
+    <button onclick='mutateFromModal("add", ${JSON.stringify(c.name).replace(/'/g,"&#39;")})'>Add to ${esc(state.deck.name)}</button>
+    ${inDeck ? `<button class="ghost" onclick='mutateFromModal("remove", ${JSON.stringify(c.name).replace(/'/g,"&#39;")})'>Remove (${inDeck.qty} in deck)</button>` : ""}
+    ${state.deck.format === "commander" && /Legendary/.test(c.type_line) && /Creature/.test(c.type_line) && (!state.deck.commander || state.deck.commander.name !== c.name) ? `<button class="ghost" onclick='commanderFromModal(${JSON.stringify(c.name).replace(/'/g,"&#39;")})'>⚔ Set commander</button>` : ""}
     ${c.type_line.includes("Legendary") && c.type_line.includes("Creature")
-      ? `<button class="ghost" onclick='setCommanderFromModal(${JSON.stringify(c.name)})'>⚔ Make commander</button>` : ""}
+      ? `<button class="ghost" onclick='setCommanderFromModal(${JSON.stringify(c.name).replace(/'/g,"&#39;")})'>⚔ Make commander</button>` : ""}
   ` : `<span class="hint">Select a deck in the builder to add this card.</span>`;
   $("overlay").classList.add("show");
 }
@@ -1041,7 +1041,7 @@ const STALE = `<div class="empty"><div class="sigil">⚠</div><h3>Server needs a
   The running server is older than this page — stop it (Ctrl-C) and run <b>doubletap web</b> again.</div>`;
 
 function deckCardHtml(d) {
-  return `<div class="gdeck" onclick='goBuilder(${JSON.stringify(d.path)})'>
+  return `<div class="gdeck" onclick='goBuilder(${JSON.stringify(d.path).replace(/'/g,"&#39;")})'>
     <div class="bg" style="background-image:url('${esc(d.art || "")}')"></div><div class="veil"></div>
     <div class="inner">
       <div class="nm">${esc(d.name)}</div>

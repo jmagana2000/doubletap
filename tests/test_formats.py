@@ -361,3 +361,51 @@ def test_game_changers_from_scryfall_flag(loaded_conn):
     assert bracket == 3 and found == ["Rhystic Study"]
     bracket, found = formats.compute_bracket([card("Sol Ring")])
     assert bracket == 2 and found == []
+
+
+def test_singleton_counts_command_zone(loaded_conn):
+    """Atraxa as commander plus Atraxa in the 99 breaks singleton."""
+    from doubletap import decks, formats
+    from doubletap.names import lookup
+
+    atraxa = lookup(loaded_conn, "Atraxa, Praetors' Voice")[0].oracle_id
+    deck = decks.Deck(format="commander", commander=atraxa)
+    deck.entries[atraxa] = 1
+    codes = {v.code for v in formats.validate(loaded_conn, deck)}
+    assert "too_many_copies" in codes
+
+
+def test_companion_rules_face_and_keyword_aware(loaded_conn):
+    from doubletap import decks, formats
+    from doubletap.names import lookup
+
+    def o(name):
+        return lookup(loaded_conn, name)[0].oracle_id
+
+    # Zirda: an Equip permanent has an activated ability despite no colon
+    zirda_ok = formats._rule_zirda(
+        [(formats.get_card(loaded_conn, o("Test Hammer")), 1)], formats.MODERN
+    )
+    assert zirda_ok is None
+
+    # a companion's own mainboard copy is part of the starting deck:
+    # Lurrus companion + mainboard Lurrus (a 3-mv permanent) must violate
+    lurrus = o("Lurrus of the Dream-Den")
+    deck = decks.Deck(format="modern", companion=lurrus)
+    deck.entries[lurrus] = 1
+    deck.entries[o("Lightning Bolt")] = 4
+    codes = {v.code for v in formats.validate(loaded_conn, deck)}
+    assert "companion_restriction" in codes
+
+
+def test_etb_tapped_reads_the_land_face(loaded_conn):
+    """An MDFC whose land face is unconditionally tapped is tapped, even
+    though the spell face says 'you may'."""
+    from doubletap.analysis import etb_tapped
+    from doubletap.formats import get_card
+    from doubletap.names import lookup
+
+    card = get_card(
+        loaded_conn, lookup(loaded_conn, "Test Vision // Test Isle")[0].oracle_id
+    )
+    assert etb_tapped(card)

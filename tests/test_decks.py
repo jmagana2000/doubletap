@@ -227,3 +227,72 @@ def test_arena_export_import_lines():
     parsed = parse_text_lines(lines)
     names = {(p.name, p.qty) for p in parsed}
     assert names == {("Standard Strike", 4), ("Mountain", 20)}  # sideboard dropped
+
+
+def test_foil_commander_marker(loaded_conn):
+    """Moxfield foil commanders carry two markers: '*F* *CMDR*'."""
+    from doubletap.decks import parse_text_lines
+
+    parsed = parse_text_lines(["1 Atraxa, Praetors' Voice (2XM) 190 *F* *CMDR*"])
+    assert parsed[0].is_commander
+    assert parsed[0].name == "Atraxa, Praetors' Voice"
+
+
+def test_csv_categories_and_short_rows(tmp_path):
+    from doubletap.decks import parse_csv
+
+    p = tmp_path / "export.csv"
+    p.write_text(
+        "Count,Name,Category\n"
+        "1,Sol Ring,Deck\n"
+        "1,Negate,Sideboard\n"
+        "1,Atraxa Praetors Voice,Commander\n"
+        "4\n"  # short row: fewer fields than the header
+    )
+    parsed = parse_csv(p)
+    names = {(pl.name, pl.is_commander) for pl in parsed}
+    assert ("Sol Ring", False) in names
+    assert ("Atraxa Praetors Voice", True) in names
+    assert all(pl.name != "Negate" for pl in parsed)  # sideboard dropped
+
+
+def test_ocr_quantityless_decklist_keeps_all_lines(monkeypatch, tmp_path):
+    """A screenshot listing bare card names must not collapse to one card."""
+    from doubletap import decks as decks_mod
+
+    lines = ["Sol Ring", "Juzám Djinn", "Relentless Rats", "Lightning Bolt", "Negate"]
+    monkeypatch.setattr(
+        "doubletap.ocr.recognize_text", lambda p: [(t, 0.9) for t in lines]
+    )
+    img = tmp_path / "list.png"
+    img.write_bytes(b"fake")
+    parsed = decks_mod.load_lines(img)
+    assert len(parsed) == 5
+
+
+def test_third_commander_line_reported_not_dropped(loaded_conn):
+    from doubletap.decks import ParsedLine, resolve
+
+    def line(name):
+        return ParsedLine(raw=name, qty=1, name=name, is_commander=True)
+
+    result = resolve(
+        loaded_conn,
+        [line("Atraxa, Praetors' Voice"), line("Thrasios, Triton Hero"),
+         line("Tymna the Weaver")],
+        "commander",
+    )
+    assert not result.ok  # the third commander is surfaced, not silently lost
+    assert len(result.ambiguous) == 1
+
+
+def test_cmdr_marker_ignored_outside_commander(loaded_conn):
+    from doubletap.decks import ParsedLine, resolve
+
+    result = resolve(
+        loaded_conn,
+        [ParsedLine(raw="x", qty=1, name="Lightning Bolt", is_commander=True)],
+        "modern",
+    )
+    assert result.deck.commander is None
+    assert sum(result.deck.entries.values()) == 1  # a plain main-deck card

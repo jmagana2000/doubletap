@@ -18,17 +18,35 @@ from doubletap.names import lookup  # noqa: E402
 
 def tiny_model(vocab):
     torch.manual_seed(0)
-    return TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=16, hidden=32, out_dim=16)
+    return TwoTowerQ(
+        vocab.features,
+        state_dim=state_dim(COMMANDER),
+        emb_dim=16,
+        hidden=32,
+        out_dim=16,
+    )
 
 
 @pytest.fixture
 def rigged_conn(loaded_conn):
-    """Ten near-identical commander decks: the model should learn the pattern."""
+    """Ten similar commander decks: the model should learn the pattern.
+    Each deck carries a rotating filler pair so the near-duplicate
+    clustering (Jaccard >= 0.8) doesn't collapse the corpus into one
+    cluster, which the homogeneity guard now rejects."""
 
     def o(name):
         return lookup(loaded_conn, name)[0].oracle_id
 
+    fillers = [
+        "Standard Strike",
+        "Rhystic Study",
+        "Twinned Test Mage",
+        "Seven Dwarves",
+        "Nazgûl",
+    ]
     for deck_id in range(1, 11):
+        f1 = fillers[deck_id % len(fillers)]
+        f2 = fillers[(deck_id + 2) % len(fillers)]
         _insert_corpus_deck(
             loaded_conn,
             deck_id,
@@ -37,7 +55,9 @@ def rigged_conn(loaded_conn):
                 o("Sol Ring"): 1,
                 o("Relentless Rats"): 20,
                 o("Juzám Djinn"): 1,
-                o("Swamp"): 77,
+                o(f1): 1,
+                o(f2): 1,
+                o("Swamp"): 75,
             },
             commander_oid=o("Atraxa, Praetors' Voice"),
         )
@@ -339,11 +359,47 @@ def test_rank_cuts_flags_low_synergy_card(rigged_conn):
     pmi = build_pmi(corpus_card_sets(decks), len(vocab), min_count=1)
     deck = decks[0]
     cuts = rank_cuts(
-        rigged_conn, model, vocab, COMMANDER, deck.main_idxs,
-        deck.commander_idx, pmi=pmi, k=10,
+        rigged_conn,
+        model,
+        vocab,
+        COMMANDER,
+        deck.main_idxs,
+        deck.commander_idx,
+        pmi=pmi,
+        k=10,
     )
     assert cuts, "expected cut candidates"
     assert all(0.0 <= c.badness <= 1.0 for c in cuts)
     assert all(c.reason for c in cuts)
     # ranked worst-first
     assert cuts == sorted(cuts, key=lambda c: -c.badness)
+
+
+def test_recovery_hides_every_copy(rigged_conn):
+    """The partial handed to the model must not contain any copy of a
+    hidden card (4-of formats previously 'recovered' visible duplicates)."""
+    vocab = build_vocab(rigged_conn, COMMANDER)
+    decks = load_corpus(rigged_conn, vocab, COMMANDER)
+    seen_partials = []
+
+    class SpyModel:
+        def score(self, partial_idxs, commander_idx, feats, pool):
+            seen_partials.append(np.array(partial_idxs))
+            return np.zeros(len(pool), dtype=np.float32)
+
+    from doubletap.ml.policy import recovery_at_k
+
+    recovery_at_k(SpyModel(), decks[:3], vocab, COMMANDER, n_hide=4,
+                  rng=np.random.default_rng(0))
+    # rigged decks run 20x Relentless Rats: whenever Rats was hidden, no
+    # copy of it may appear in the partial the model scored
+    rats_idx = None
+    for deck in decks[:3]:
+        vals, counts = np.unique(deck.main_idxs, return_counts=True)
+        rats_idx = int(vals[np.argmax(counts)])
+    for partial in seen_partials:
+        present = set(np.unique(partial))
+        full = set(np.unique(decks[0].main_idxs))
+        hidden_here = full - present
+        for h in hidden_here:
+            assert h not in present

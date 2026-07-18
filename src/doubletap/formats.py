@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 import re
 import sqlite3
 from dataclasses import dataclass
@@ -243,16 +244,23 @@ def _rule_umori(entries, fmt):
             )
 
 
+def _faces(card: dict) -> list[dict]:
+    """The card itself, or each face of a multiface card — companion rules
+    must read per-face costs/text (top-level fields are absent on MDFCs)."""
+    return card.get("card_faces") or [card]
+
+
 def _rule_jegantha(entries, fmt):
     for card, _ in entries:
-        symbols = [
-            s
-            for s in re.findall(r"\{([^}]+)\}", card.get("mana_cost") or "")
-            if not s.isdigit()
-        ]
-        for s in set(symbols):
-            if symbols.count(s) > 1:
-                return f"{card['name']} has more than one {{{s}}} in its mana cost"
+        for face in _faces(card):
+            symbols = [
+                s
+                for s in re.findall(r"\{([^}]+)\}", face.get("mana_cost") or "")
+                if not s.isdigit()
+            ]
+            for s in set(symbols):
+                if symbols.count(s) > 1:
+                    return f"{card['name']} has more than one {{{s}}} in its mana cost"
 
 
 def _rule_lutri(entries, fmt):
@@ -261,13 +269,16 @@ def _rule_lutri(entries, fmt):
             return f"{qty}x {card['name']} — nonland cards must be singleton"
 
 
+# keyword abilities that are activated abilities without a ":" in oracle text
+_ACTIVATION_KEYWORDS = {"Equip", "Crew", "Cycling", "Reconfigure", "Fortify"}
+
+
 def _rule_zirda(entries, fmt):
     for card, _ in entries:
-        if (
-            _is_permanent(card)
-            and not is_land(card)
-            and ":" not in card.get("oracle_text", "")
-        ):
+        has_activated = any(
+            ":" in (face.get("oracle_text") or "") for face in _faces(card)
+        ) or bool(_ACTIVATION_KEYWORDS & set(card.get("keywords", [])))
+        if _is_permanent(card) and not is_land(card) and not has_activated:
             return f"{card['name']} is a permanent with no activated ability"
 
 
@@ -377,7 +388,8 @@ def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
                 starting = [
                     (cards[oid], qty)
                     for oid, qty in deck.entries.items()
-                    if oid != deck.companion
+                    # mainboard copies of the companion count; only the
+                    # companion-zone copy itself sits outside
                 ] + [(cards[oid], 1) for oid in commander_oids]
                 problem = rule(starting, fmt)
                 if problem:
@@ -402,8 +414,14 @@ def validate(conn: sqlite3.Connection, deck: Deck) -> list[Violation]:
                 )
             )
 
-    for oid, qty in deck.entries.items():
-        card = cards[oid]
+    # singleton/copy limits count the WHOLE deck by oracle_id — command-zone
+    # copies included (Atraxa as commander + Atraxa in the 99 is illegal)
+    zone_oids = [o for o in (deck.commander, deck.partner, deck.companion) if o]
+    all_copies = Counter(deck.entries)
+    for oid in zone_oids:
+        all_copies[oid] += 1
+    for oid, qty in all_copies.items():
+        card = cards.get(oid) or get_card(conn, oid)
         cap = named_copy_cap(card) or fmt.copy_limit
         if qty > cap and not is_basic_land(card):
             violations.append(

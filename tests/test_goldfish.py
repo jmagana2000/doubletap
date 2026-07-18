@@ -234,3 +234,20 @@ def test_goldfish_reranker_promotes_castable(loaded_conn):
     spells_only = np.array([idx("Juzám Djinn")] * 30, dtype=np.int64)
     same = rerank(scores, spells_only, None)
     assert np.array_equal(same, scores)
+
+
+def test_colored_capacity_is_consumed_within_a_turn():
+    """Half the lands being off-color must hurt a mono-colored hand: colored
+    capacity is spent per cast, not just total mana (pre-fix these tied)."""
+    mountain = {
+        "type_line": "Basic Land — Mountain",
+        "oracle_text": "({T}: Add {R}.)",
+        "cmc": 0,
+        "produced_mana": ["R"],
+    }
+    heavy = spell(2, pips_b=2)  # {B}{B}: colored capacity binds hard
+    all_swamps = compile_deck([(heavy, 30), (SWAMP, 30)])
+    split_lands = compile_deck([(heavy, 30), (SWAMP, 15), (mountain, 15)])
+    a = simulate(all_swamps, games=300, seed=11)
+    b = simulate(split_lands, games=300, seed=11)
+    assert b["mana_efficiency"] < a["mana_efficiency"] - 0.03

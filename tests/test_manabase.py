@@ -98,3 +98,18 @@ def test_basic_land_split_proportional():
     split = manabase.basic_land_split({"W": 10, "B": 20}, 30)
     assert split == {"W": 10, "B": 20}
     assert sum(manabase.basic_land_split({}, 7).values()) == 7
+
+
+def test_colorless_commander_gets_wastes(loaded_conn):
+    entries = {oid(loaded_conn, "Sol Ring"): 1}
+    result = manabase.recommend_manabase(
+        loaded_conn,
+        entries,
+        COMMANDER,
+        commander_oid=oid(loaded_conn, "Test Titan of the Wastes"),
+        land_count=20,
+    )
+    assert result.basics == {"Wastes": 20}
+    assert not result.lands or all(
+        colors == "" for _n, _q, colors, *_ in result.lands
+    )

@@ -221,10 +221,11 @@ def recovery_at_k(
         if nonland.size <= n_hide:
             continue
         hidden_pos = rng.choice(nonland, size=n_hide, replace=False)
-        keep = np.ones(deck.main_idxs.size, dtype=bool)
-        keep[hidden_pos] = False
-        partial = deck.main_idxs[keep]
         hidden = np.unique(deck.main_idxs[hidden_pos])
+        # hide ALL copies of a sampled card: in 4-of formats a remaining
+        # visible copy lets the model "recover" what it can plainly see
+        keep = ~np.isin(deck.main_idxs, hidden)
+        partial = deck.main_idxs[keep]
 
         scores = score_state(
             model, vocab, fmt, partial, deck.commander_idx, deck.partner_idx

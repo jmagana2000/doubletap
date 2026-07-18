@@ -294,7 +294,7 @@ def deck_commander(
 def deck_add(
     path: Path = typer.Argument(..., exists=True, readable=True),
     name: str = typer.Argument(..., help="Card to add"),
-    qty: int = typer.Option(1, "--qty", "-n", help="How many copies"),
+    qty: int = typer.Option(1, "--qty", "-n", min=1, help="How many copies"),
     force: bool = typer.Option(False, "--force", help="Add even past the copy limit"),
 ):
     """Add a card to a saved deck. Adding past the copy limit (singleton in
@@ -341,7 +341,7 @@ def deck_drop(
 def deck_remove(
     path: Path = typer.Argument(..., exists=True, readable=True),
     name: str = typer.Argument(..., help="Card to remove"),
-    qty: int = typer.Option(1, "--qty", "-n", help="How many copies"),
+    qty: int = typer.Option(1, "--qty", "-n", min=1, help="How many copies"),
 ):
     """Remove a card from a saved deck. Removing the commander, partner,
     or companion clears that slot."""

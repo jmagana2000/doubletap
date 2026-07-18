@@ -163,12 +163,16 @@ def recommend_manabase(
         basic_pips = {
             c: p for c, p in report.pips.items() if identity is None or c in identity
         }
-        result.basics = {
-            BASICS[c]: q for c, q in basic_land_split(basic_pips, remaining).items()
-        }
-        for c, q in basic_land_split(basic_pips, remaining).items():
-            if c in achieved:
-                achieved[c] += q  # a basic is a full source of its color
+        if not basic_pips and (identity is not None and not identity):
+            # colorless identity (Kozilek-style): every colored basic is an
+            # identity violation — Wastes is the only legal basic
+            result.basics = {"Wastes": remaining}
+        else:
+            split = basic_land_split(basic_pips, remaining)
+            result.basics = {BASICS[c]: q for c, q in split.items()}
+            for c, q in split.items():
+                if c in achieved:
+                    achieved[c] += q  # a basic is a full source of its color
 
     result.lands = sorted(
         (

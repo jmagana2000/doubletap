@@ -58,7 +58,10 @@ def rank_cuts(
     if not uniq:
         return []
 
-    role_counts = vocab.roles[np.array(uniq)].sum(axis=0)
+    qty = {int(i): int((partial == i).sum()) for i in uniq}
+    role_counts = sum(
+        vocab.roles[i].astype(int) * qty[i] for i in uniq
+    )  # role quotas count copies, not distinct names (4-of formats)
     wincon_total = sum(int(role_counts[ROLE_ORDER.index(r)]) for r in _PROTECT_ROLES)
 
     model_scores, synergy = {}, {}

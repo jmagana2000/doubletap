@@ -230,6 +230,7 @@ def simulate(
                 and castable(ds.commander_mv, ds.commander_pips)
             ):
                 spent += ds.commander_mv
+                color_cap -= ds.commander_pips  # colored capacity is spent too
                 commander_cast_turn = turn
                 if turn <= max(ds.commander_mv, 1):
                     m["cmd_on_curve"] += 1
@@ -241,6 +242,7 @@ def simulate(
                 if ds.mv[i] == 0 or not castable(ds.mv[i], ds.pips[i]):
                     continue
                 spent += int(ds.mv[i])
+                color_cap -= ds.pips[i]  # colored capacity is spent too
                 hand.remove(i)
                 if ds.prod_amount[i] > 0:
                     battlefield.append(i)
