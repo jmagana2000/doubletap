@@ -486,3 +486,18 @@ def test_ui_passes_format_args():
     assert 'args.push("--format", val("cmp-format"))' in html
     assert 'p.set("format", val("rec-format"))' in html
     assert 'id="cmp-format"' in html and 'id="rec-format"' in html
+
+
+def test_no_unescaped_stringify_in_attributes():
+    """Every JSON.stringify interpolated into inline HTML must escape
+    apostrophes — Gaea's Cradle-class names were breaking 7 buttons."""
+    import re
+
+    html = (web.STATIC / "index.html").read_text()
+    for m in re.finditer(r"JSON\.stringify\([^)]*\)(?!\.replace)", html):
+        line = html[: m.start()].count("\n") + 1
+        context = html[max(0, m.start() - 120) : m.start()]
+        # fetch bodies are JS context, not HTML attributes — those are fine
+        assert "body:" in context.split("\n")[-1], (
+            f"unescaped JSON.stringify in attribute context at line {line}"
+        )
