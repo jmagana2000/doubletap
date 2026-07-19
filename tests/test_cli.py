@@ -29,7 +29,7 @@ def write_decklist(tmp_path, name="decklist.txt", body=None):
         "30 Swamp\n"
     )
     path = tmp_path / name
-    path.write_text(body)
+    path.write_text(body, encoding="utf-8")
     return path
 
 

@@ -192,7 +192,7 @@ def test_crawl_end_to_end_and_resumability(loaded_conn, data_home):
     assert deck_ok.call_count == 1
 
     shard = archidekt.shard_path("commander")
-    with gzip.open(shard, "rt") as f:
+    with gzip.open(shard, "rt", encoding="utf-8") as f:
         assert len(f.readlines()) == 2
 
 

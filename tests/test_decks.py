@@ -9,7 +9,9 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_parse_text_lines_quantities_sections_and_tails():
-    parsed = parse_text_lines((FIXTURES / "decklist.txt").read_text().splitlines())
+    parsed = parse_text_lines(
+        (FIXTURES / "decklist.txt").read_text(encoding="utf-8").splitlines()
+    )
     assert [(p.qty, p.name) for p in parsed] == [
         (4, "Lightning Bolt"),
         (4, "Once Upon a Time"),
@@ -247,7 +249,8 @@ def test_csv_categories_and_short_rows(tmp_path):
         "1,Sol Ring,Deck\n"
         "1,Negate,Sideboard\n"
         "1,Atraxa Praetors Voice,Commander\n"
-        "4\n"  # short row: fewer fields than the header
+        "4\n",  # short row: fewer fields than the header
+        encoding="utf-8",
     )
     parsed = parse_csv(p)
     names = {(pl.name, pl.is_commander) for pl in parsed}
@@ -278,8 +281,11 @@ def test_third_commander_line_reported_not_dropped(loaded_conn):
 
     result = resolve(
         loaded_conn,
-        [line("Atraxa, Praetors' Voice"), line("Thrasios, Triton Hero"),
-         line("Tymna the Weaver")],
+        [
+            line("Atraxa, Praetors' Voice"),
+            line("Thrasios, Triton Hero"),
+            line("Tymna the Weaver"),
+        ],
         "commander",
     )
     assert not result.ok  # the third commander is surfaced, not silently lost

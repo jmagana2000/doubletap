@@ -96,7 +96,7 @@ def test_every_cli_command_reachable(client):
 
 
 def test_every_command_has_a_ui_control():
-    html = (web.STATIC / "index.html").read_text()
+    html = (web.STATIC / "index.html").read_text(encoding="utf-8")
     # commands driven by dedicated controls carry a data-cmd marker; the rest
     # appear in the JS arg builders — either way the name must be in the page
     for group, sub in ALL_COMMANDS:
@@ -268,7 +268,9 @@ def test_legendary_creature_filter_and_missing_commander_flag(client):
     assert "Sol Ring" not in names
 
     import_deck(client, "1 Sol Ring", name="nocmd")
-    path = next(d["path"] for d in client.get("/api/decks").json() if "nocmd" in d["path"])
+    path = next(
+        d["path"] for d in client.get("/api/decks").json() if "nocmd" in d["path"]
+    )
     detail = client.get("/api/deck?path=" + path).json()
     assert any("commander" in v for v in detail["violations"])
 
@@ -276,7 +278,9 @@ def test_legendary_creature_filter_and_missing_commander_flag(client):
 def test_drop_deck_via_run(client):
     """The builder's Drop button posts exactly this."""
     import_deck(client, "1 Sol Ring", name="doomed")
-    path = next(d["path"] for d in client.get("/api/decks").json() if "doomed" in d["path"])
+    path = next(
+        d["path"] for d in client.get("/api/decks").json() if "doomed" in d["path"]
+    )
     out = run(client, ["deck", "drop", path, "--yes"])
     assert out["exit_code"] == 0, out["output"]
     assert all("doomed" not in d["path"] for d in client.get("/api/decks").json())
@@ -285,7 +289,9 @@ def test_drop_deck_via_run(client):
 def test_duplicate_add_refused_in_commander(client):
     """The builder's Add button must not silently create an illegal duplicate."""
     import_deck(client, "1 Sol Ring", name="duptest")
-    path = next(d["path"] for d in client.get("/api/decks").json() if "duptest" in d["path"])
+    path = next(
+        d["path"] for d in client.get("/api/decks").json() if "duptest" in d["path"]
+    )
 
     out = run(client, ["deck", "add", path, "Sol Ring"])
     assert out["exit_code"] == 1
@@ -310,10 +316,18 @@ def test_suggest_endpoint_with_filters(client, loaded_conn, data_home):
 
     vocab = build_vocab(loaded_conn, COMMANDER)
     torch.manual_seed(0)
-    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8)
+    tiny = TwoTowerQ(
+        vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8
+    )
     models = data_home / "models"
     models.mkdir(exist_ok=True)
-    save_np_checkpoint(models / "cql_commander.npz", tiny.state_dict(), vocab.oracle_ids, "commander", "cql")
+    save_np_checkpoint(
+        models / "cql_commander.npz",
+        tiny.state_dict(),
+        vocab.oracle_ids,
+        "commander",
+        "cql",
+    )
 
     import_deck(client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n")
     path = client.get("/api/decks").json()[0]["path"]
@@ -340,13 +354,24 @@ def test_suggest_personalize_and_price_params(client, loaded_conn, data_home):
 
     vocab = build_vocab(loaded_conn, COMMANDER)
     torch.manual_seed(0)
-    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8)
+    tiny = TwoTowerQ(
+        vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8
+    )
     (data_home / "models").mkdir(exist_ok=True)
-    save_np_checkpoint(data_home / "models" / "cql_commander.npz", tiny.state_dict(), vocab.oracle_ids, "commander", "cql")
+    save_np_checkpoint(
+        data_home / "models" / "cql_commander.npz",
+        tiny.state_dict(),
+        vocab.oracle_ids,
+        "commander",
+        "cql",
+    )
     import_deck(client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n")
     path = client.get("/api/decks").json()[0]["path"]
 
-    r = client.get("/api/suggest", params={"path": path, "k": "5", "personalize": "0", "max_price": "0.50"})
+    r = client.get(
+        "/api/suggest",
+        params={"path": path, "k": "5", "personalize": "0", "max_price": "0.50"},
+    )
     assert r.status_code == 200, r.text
     for c in r.json()["suggestions"]:
         assert c["price"] is None or c["price"] <= 0.50
@@ -362,10 +387,20 @@ def test_suggest_reports_deck_fullness(client, loaded_conn, data_home):
 
     vocab = build_vocab(loaded_conn, COMMANDER)
     torch.manual_seed(0)
-    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8)
+    tiny = TwoTowerQ(
+        vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8
+    )
     (data_home / "models").mkdir(exist_ok=True)
-    save_np_checkpoint(data_home / "models" / "cql_commander.npz", tiny.state_dict(), vocab.oracle_ids, "commander", "cql")
-    import_deck(client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n98 Swamp\n")
+    save_np_checkpoint(
+        data_home / "models" / "cql_commander.npz",
+        tiny.state_dict(),
+        vocab.oracle_ids,
+        "commander",
+        "cql",
+    )
+    import_deck(
+        client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n98 Swamp\n"
+    )
     path = client.get("/api/decks").json()[0]["path"]
 
     d = client.get("/api/suggest", params={"path": path, "k": "3"}).json()
@@ -382,10 +417,21 @@ def test_swaps_endpoint(client, loaded_conn, data_home):
 
     vocab = build_vocab(loaded_conn, COMMANDER)
     torch.manual_seed(0)
-    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8)
+    tiny = TwoTowerQ(
+        vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8
+    )
     (data_home / "models").mkdir(exist_ok=True)
-    save_np_checkpoint(data_home / "models" / "cql_commander.npz", tiny.state_dict(), vocab.oracle_ids, "commander", "cql")
-    import_deck(client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n1 Juzám Djinn\n1 Rhystic Study\n")
+    save_np_checkpoint(
+        data_home / "models" / "cql_commander.npz",
+        tiny.state_dict(),
+        vocab.oracle_ids,
+        "commander",
+        "cql",
+    )
+    import_deck(
+        client,
+        "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n1 Juzám Djinn\n1 Rhystic Study\n",
+    )
     path = next(d["path"] for d in client.get("/api/decks").json())
 
     d = client.get("/api/swaps", params={"path": path, "k": "3"}).json()
@@ -410,10 +456,21 @@ def test_swaps_sorted_by_delta(client, loaded_conn, data_home):
 
     vocab = build_vocab(loaded_conn, COMMANDER)
     torch.manual_seed(0)
-    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8)
+    tiny = TwoTowerQ(
+        vocab.features, state_dim=state_dim(COMMANDER), emb_dim=8, hidden=16, out_dim=8
+    )
     (data_home / "models").mkdir(exist_ok=True)
-    save_np_checkpoint(data_home / "models" / "cql_commander.npz", tiny.state_dict(), vocab.oracle_ids, "commander", "cql")
-    import_deck(client, "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n1 Juzám Djinn\n1 Rhystic Study\n1 Relentless Rats\n")
+    save_np_checkpoint(
+        data_home / "models" / "cql_commander.npz",
+        tiny.state_dict(),
+        vocab.oracle_ids,
+        "commander",
+        "cql",
+    )
+    import_deck(
+        client,
+        "Commander\n1 Atraxa, Praetors' Voice\nDeck\n1 Sol Ring\n1 Juzám Djinn\n1 Rhystic Study\n1 Relentless Rats\n",
+    )
     path = next(d["path"] for d in client.get("/api/decks").json())
 
     d = client.get("/api/swaps", params={"path": path, "k": "4"}).json()
@@ -436,14 +493,24 @@ def test_suggest_format_override(client, loaded_conn, data_home):
 
     vocab = build_vocab(loaded_conn, MODERN)
     torch.manual_seed(0)
-    tiny = TwoTowerQ(vocab.features, state_dim=state_dim(MODERN), emb_dim=8, hidden=16, out_dim=8)
+    tiny = TwoTowerQ(
+        vocab.features, state_dim=state_dim(MODERN), emb_dim=8, hidden=16, out_dim=8
+    )
     (data_home / "models").mkdir(exist_ok=True)
-    save_np_checkpoint(data_home / "models" / "bc_modern.npz", tiny.state_dict(), vocab.oracle_ids, "modern", "bc")
+    save_np_checkpoint(
+        data_home / "models" / "bc_modern.npz",
+        tiny.state_dict(),
+        vocab.oracle_ids,
+        "modern",
+        "bc",
+    )
     import_deck(client, "4 Lightning Bolt\n")  # imported as commander by default
 
     path = next(d["path"] for d in client.get("/api/decks").json())
     # no commander model planted: deck's own format fails, override succeeds
-    assert client.get("/api/suggest", params={"path": path, "k": "3"}).status_code == 404
+    assert (
+        client.get("/api/suggest", params={"path": path, "k": "3"}).status_code == 404
+    )
     r = client.get("/api/suggest", params={"path": path, "k": "3", "format": "modern"})
     assert r.status_code == 200, r.text
     d = r.json()
@@ -463,14 +530,24 @@ def test_complete_format_override_via_run(client, loaded_conn, data_home):
     for fmt, name in ((MODERN, "bc_modern.npz"), (COMMANDER, "bc_commander.npz")):
         vocab = build_vocab(loaded_conn, fmt)
         torch.manual_seed(0)
-        tiny = TwoTowerQ(vocab.features, state_dim=state_dim(fmt), emb_dim=8, hidden=16, out_dim=8)
-        save_np_checkpoint(data_home / "models" / name, tiny.state_dict(), vocab.oracle_ids, fmt.name, "bc")
+        tiny = TwoTowerQ(
+            vocab.features, state_dim=state_dim(fmt), emb_dim=8, hidden=16, out_dim=8
+        )
+        save_np_checkpoint(
+            data_home / "models" / name,
+            tiny.state_dict(),
+            vocab.oracle_ids,
+            fmt.name,
+            "bc",
+        )
 
     import_deck(client, "4 Lightning Bolt\n")  # saved as a commander-format pile
     path = next(d["path"] for d in client.get("/api/decks").json())
 
     # the exact arg list completeDeck() builds with "Build as: modern"
-    out = run(client, ["complete", "--deck", path, "--bracket", "3", "--format", "modern"])
+    out = run(
+        client, ["complete", "--deck", path, "--bracket", "3", "--format", "modern"]
+    )
     assert out["exit_code"] == 0, out["output"]
     assert "Added" in out["output"]
 
@@ -482,7 +559,7 @@ def test_complete_format_override_via_run(client, loaded_conn, data_home):
 
 def test_ui_passes_format_args():
     """The panels actually send --format / format= — pin the wiring."""
-    html = (web.STATIC / "index.html").read_text()
+    html = (web.STATIC / "index.html").read_text(encoding="utf-8")
     assert 'args.push("--format", val("cmp-format"))' in html
     assert 'p.set("format", val("rec-format"))' in html
     assert 'id="cmp-format"' in html and 'id="rec-format"' in html
@@ -493,7 +570,7 @@ def test_no_unescaped_stringify_in_attributes():
     apostrophes — Gaea's Cradle-class names were breaking 7 buttons."""
     import re
 
-    html = (web.STATIC / "index.html").read_text()
+    html = (web.STATIC / "index.html").read_text(encoding="utf-8")
     for m in re.finditer(r"JSON\.stringify\([^)]*\)(?!\.replace)", html):
         line = html[: m.start()].count("\n") + 1
         context = html[max(0, m.start() - 120) : m.start()]

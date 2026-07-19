@@ -8,7 +8,9 @@ import respx
 from doubletap import scryfall
 
 FIXTURES = Path(__file__).parent / "fixtures"
-FIXTURE_COUNT = len((FIXTURES / "oracle-cards.jsonl").read_text().splitlines())
+FIXTURE_COUNT = len(
+    (FIXTURES / "oracle-cards.jsonl").read_text(encoding="utf-8").splitlines()
+)
 
 DOWNLOAD_URL = "https://data.scryfall.io/oracle-cards/test.jsonl.gz"
 CATALOG = {
