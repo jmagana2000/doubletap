@@ -58,11 +58,12 @@ Requirements: Python ≥ 3.11; macOS for photo import (everything else is
 cross-platform); ~200 MB disk for the card database.
 
 Recommended (uv reads `.python-version` and `uv.lock`, so the environment is
-always right — `dev` = tests, `ocr` = photo import, `ml` = training):
+always right — `dev` = tests, `ocr` = photo import, `ml` = training). This
+works the same on Windows — `uv` handles the venv either way:
 
 ```bash
 uv sync --extra dev --extra ocr --extra ml
-source .venv/bin/activate
+source .venv/bin/activate     # Windows: .venv\Scripts\Activate.ps1 (PowerShell) or .venv\Scripts\activate.bat (cmd)
 doubletap cards sync
 ```
 
@@ -70,13 +71,23 @@ The last command downloads ~180 MB of card data from Scryfall.
 
 Plain pip alternative — use **python3.11 specifically** (a newer system
 `python3` will build a venv PyTorch can't install into on Intel Macs), and
-don't paste the block with comments into zsh:
+don't paste the block with comments into zsh. macOS/Linux:
 
 ```bash
 python3.11 -m venv .venv
 .venv/bin/pip install -e ".[dev,ocr]"
 .venv/bin/pip install -e ".[ml]"
 source .venv/bin/activate
+doubletap cards sync
+```
+
+Windows (PowerShell; the `ocr` extra is macOS-only, so it's skipped here):
+
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\pip install -e ".[dev]"
+.venv\Scripts\pip install -e ".[ml]"
+.venv\Scripts\Activate.ps1
 doubletap cards sync
 ```
 
@@ -501,7 +512,7 @@ recovery@50 by more than the keep-bar margin on your corpus, pass
 | Retrain models | After meaningful corpus growth or a card-db refresh | `corpus pmi`, then `train bc`, then `train cql` (that order — CQL needs both) |
 | Back up | Anytime | Copy `~/.doubletap/decks/` (tiny, irreplaceable). The card db and models are rebuildable; `corpus/raw/` shards avoid a re-crawl |
 | Reset completely | Corruption, fresh start | Delete `~/.doubletap/` — decks included, so back those up first |
-| Run the test suite | After pulling changes | `.venv/bin/pytest` (no network needed) |
+| Run the test suite | After pulling changes | `.venv/bin/pytest` (no network needed); Windows: `.venv\Scripts\pytest` |
 
 **Update the Game Changers list** when WotC revises it: edit
 `GAME_CHANGERS` in `src/doubletap/formats.py`.
@@ -512,7 +523,7 @@ recovery@50 by more than the keep-bar margin on your corpus, pass
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `command not found: doubletap` | venv not active | `source .venv/bin/activate` or use `.venv/bin/doubletap` |
+| `command not found: doubletap` | venv not active | `source .venv/bin/activate` or use `.venv/bin/doubletap`; Windows: `.venv\Scripts\Activate.ps1` or `.venv\Scripts\doubletap` |
 | `No module named 'torch'` on recommend/complete | Only legacy `.pt` checkpoints present; torch-free `.npz` weights missing | Run `doubletap train export` once on a torch-enabled setup (`uv sync --extra ml`); afterwards suggestions never need torch |
 | `No trained model found` | No checkpoint for this format | Run the training workflow (§4), or check `~/.doubletap/models/` |
 | `only N parsed <format> decks; crawl more first` | Corpus below the 20-deck training minimum | `corpus crawl` more decks |
