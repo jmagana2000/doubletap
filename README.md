@@ -69,7 +69,7 @@ uv sync --extra dev --extra ocr --extra ml
 ```
 
 Prefer plain pip? Use **python3.11 specifically** (your system `python3` may
-be newer, and PyTorch on Intel Macs requires 3.11):
+be newer, and PyTorch on Intel Macs requires 3.11). macOS/Linux:
 
 ```bash
 python3.11 -m venv .venv
@@ -77,11 +77,19 @@ python3.11 -m venv .venv
 .venv/bin/pip install -e ".[ml]"
 ```
 
-Then activate the environment so you can type `doubletap` directly:
+Windows (PowerShell):
 
-```bash
-source .venv/bin/activate
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\pip install -e ".[dev]"
+.venv\Scripts\pip install -e ".[ml]"
 ```
+
+(the `ocr` extra is macOS-only — skip it on Windows)
+
+Then activate the environment so you can type `doubletap` directly.
+macOS/Linux: `source .venv/bin/activate`. Windows (PowerShell):
+`.venv\Scripts\Activate.ps1`; Windows (cmd): `.venv\Scripts\activate.bat`.
 
 > **Note:** PyTorch is only needed for *training* your own model.
 > Suggestions run on lightweight numpy weights, so you can skip the `ml`
@@ -517,8 +525,11 @@ them highly. Higher numbers mean better suggestions.
 ## Troubleshooting
 
 **`command not found: doubletap`**
-The virtual environment isn't active. Run `source .venv/bin/activate` first,
-or prefix every command with `.venv/bin/doubletap`.
+The virtual environment isn't active. macOS/Linux: run
+`source .venv/bin/activate` first, or prefix every command with
+`.venv/bin/doubletap`. Windows: run `.venv\Scripts\Activate.ps1` (PowerShell)
+or `.venv\Scripts\activate.bat` (cmd) first, or prefix every command with
+`.venv\Scripts\doubletap`.
 
 **Photo import reads the wrong text**
 The tool works best on screenshots of printed decklists. For physical card
@@ -536,8 +547,9 @@ released card.
 **`No module named 'torch'` when running `recommend` or `complete`**
 The `doubletap` launcher is pointing at a Python without torch installed
 (this can happen when the venv holds more than one Python version). Reinstall
-the launcher from the interpreter that has torch:
-`.venv/bin/python -m pip install -e . --no-deps --force-reinstall`
+the launcher from the interpreter that has torch. macOS/Linux:
+`.venv/bin/python -m pip install -e . --no-deps --force-reinstall`. Windows:
+`.venv\Scripts\python -m pip install -e . --no-deps --force-reinstall`
 
 ---
 
@@ -545,8 +557,8 @@ the launcher from the interpreter that has torch:
 
 ```bash
 # run all tests (no network required):
-.venv/bin/pytest
-# photo OCR smoke test (requires a real image):
+.venv/bin/pytest          # Windows: .venv\Scripts\pytest
+# photo OCR smoke test (requires a real image, macOS only):
 .venv/bin/pytest -m macos_ocr
 ```
 

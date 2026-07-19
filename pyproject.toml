@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "doubletap"
-version = "0.1.9"
+version = "0.1.10"
 description = "Magic: The Gathering (MTG) deck-building assistant — photo import, Commander rules validation, deck analytics, and ML card recommendations"
 readme = "README.md"
 license = "MIT"
