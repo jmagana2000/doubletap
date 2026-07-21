@@ -453,10 +453,10 @@ each add) and tells you how many lands remain to add.
 | `--goldfish` | off | After completing, goldfish the result with the land gap filled by basics split proportionally to the deck's colored pips (simulation only — the saved deck still leaves the mana base to you) |
 | `--synergy-weight` | 0.3 | 0–1 blend of the model score with PPMI synergy against the deck built so far; re-applied after every greedy add; validated on Commander; 0 leaves ranking unchanged |
 
-`--synergy-weight`'s default (0.3) is validated against a 200-deck Commander
-holdout only; Modern and Standard use the same default value but it hasn't
-been separately checked against those formats' holdouts. Pass `0` to disable
-if it doesn't seem to help for your format.
+`--synergy-weight`'s default (0.3) is validated against 200-deck Commander
+and Modern holdouts. Standard uses the same default value but hasn't been
+separately checked against its holdout yet. Pass `0` to disable if it
+doesn't seem to help for your format.
 
 Lands are never suggested by design — add them yourself using the gap report
 and the color-balance section of `deck analyze`.

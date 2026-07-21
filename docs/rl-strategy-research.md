@@ -487,13 +487,27 @@ champions exactly (BC 21.43, CQL 23.70):
 
 Comfortably clears the +2 bar for both shipped algorithms — **promoted
 to the shipped default (0.3)**, `--synergy-weight 0` still available to
-disable it. Only Commander was run at full scale; Modern/Standard share
-the same default value unvalidated (follow-up if wanted: same 200-deck
-protocol on those formats' holdouts). Also noted: `pool_synergy`'s
-per-candidate Python loop costs ~1.3s per call at commander's
-~30k-candidate legal pool — real but acceptable latency for
-`recommend`/`complete`, worth revisiting (vectorizing the pair lookup)
-if it becomes a bigger fraction of runtime as the corpus/vocab grows.
+disable it. Also noted: `pool_synergy`'s per-candidate Python loop costs
+~1.3s per call at commander's ~30k-candidate legal pool — real but
+acceptable latency for `recommend`/`complete`, worth revisiting
+(vectorizing the pair lookup) if it becomes a bigger fraction of
+runtime as the corpus/vocab grows.
+
+**Modern follow-up (2026-07-21, same day):** 200-deck canonical run
+against `bc_modern` (modern's shipped default — no CQL checkpoint
+exists locally; CQL missed modern's keep-bar per the 2026-07-18
+re-baseline above), baseline matching the documented champion exactly
+(32.10):
+
+| weight | BC recovery@50 |
+|---|---|
+| 0.00 (champion) | 32.10 |
+| 0.30 | 35.82 |
+| **delta** | **+3.72** |
+
+Clears the bar too (recovery@10 also jumped, 14.89 → 19.30). Modern
+confirmed at full scale; **Standard remains the only unvalidated
+format** (shares the 0.3 default value, not separately checked).
 
 ## 5. Effort and order
 
