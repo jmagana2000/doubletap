@@ -437,7 +437,7 @@ synergy rationale ("with Sol Ring (10.5)") and a land-count gap report.
 | `-k` | 20 | How many suggestions to show |
 | `--model` | auto | Checkpoint to use; defaults to `cql_<format>`, falling back to `bc_<format>` (CQL cleared the keep-bar on 2026-07-13) |
 | `--personalize` | 0.3 | 0–1 blend of the model score with card frequencies among corpus decks most similar to yours; higher favors decks like yours, 0 disables |
-| `--synergy-weight` | 0 | 0–1 blend of the model score with PPMI synergy against the partial deck (the same pairing signal already shown in the rationale); 0 leaves ranking unchanged |
+| `--synergy-weight` | 0.3 | 0–1 blend of the model score with PPMI synergy against the partial deck (the same pairing signal already shown in the rationale); validated on Commander (200-deck holdout: +3.8 to +4.2 recovery@50 over 0); 0 leaves ranking unchanged |
 | `--max-card-price` | none | Per-card USD budget cap; only cards at or under this market price are suggested (unpriced cards stay eligible) |
 
 **`complete`** — greedily fills the deck's nonland slots (re-scoring after
@@ -451,7 +451,12 @@ each add) and tells you how many lands remain to add.
 | `--max-card-price` | none | Per-card USD budget cap on added cards |
 | `--bracket` | 3 | Target Commander Bracket for the result: 1–2 add no Game Changers, 3 caps the deck at three total (counting existing ones), 4–5 unrestricted. Ignored for Modern |
 | `--goldfish` | off | After completing, goldfish the result with the land gap filled by basics split proportionally to the deck's colored pips (simulation only — the saved deck still leaves the mana base to you) |
-| `--synergy-weight` | 0 | 0–1 blend of the model score with PPMI synergy against the deck built so far; re-applied after every greedy add; 0 leaves ranking unchanged |
+| `--synergy-weight` | 0.3 | 0–1 blend of the model score with PPMI synergy against the deck built so far; re-applied after every greedy add; validated on Commander; 0 leaves ranking unchanged |
+
+`--synergy-weight`'s default (0.3) is validated against a 200-deck Commander
+holdout only; Modern and Standard use the same default value but it hasn't
+been separately checked against those formats' holdouts. Pass `0` to disable
+if it doesn't seem to help for your format.
 
 Lands are never suggested by design — add them yourself using the gap report
 and the color-balance section of `deck analyze`.

@@ -732,7 +732,7 @@ def recommend(
         "cards common in corpus decks similar to yours rank higher",
     ),
     synergy_weight: float = typer.Option(
-        0.0,
+        0.3,
         "--synergy-weight",
         help="Blend weight for PPMI synergy with the partial deck (0 = off): "
         "the same signal swaps.py uses to judge cuts, applied to ranking additions",
@@ -836,7 +836,7 @@ def complete(
         " split proportionally to the deck's colored pips",
     ),
     synergy_weight: float = typer.Option(
-        0.0,
+        0.3,
         "--synergy-weight",
         help="Blend weight for PPMI synergy with the deck built so far (0 = off)",
     ),
