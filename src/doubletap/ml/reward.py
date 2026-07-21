@@ -5,6 +5,7 @@ import numpy as np
 
 from ..formats import FormatConfig
 from .data import CorpusDeck, Vocab
+from .neighbors import blend
 
 
 @dataclass
@@ -113,6 +114,41 @@ def structure_reward(vocab: Vocab, fmt: FormatConfig, deck_idxs: np.ndarray) -> 
         return -1.0
     land_frac = vocab.land[deck_idxs].sum() / deck_idxs.size
     return -abs(float(land_frac) - fmt.land_fraction_target)
+
+
+def pool_synergy(
+    pmi: PMIModel, pool: np.ndarray, partial_idxs: np.ndarray
+) -> np.ndarray:
+    """Mean PPMI of each pool candidate with the distinct cards already in the
+    deck — the same per-target computation as PMIModel.synergy, over a pool."""
+    distinct = np.unique(partial_idxs)
+    if distinct.size == 0:
+        return np.zeros(pool.size, dtype=np.float32)
+    return np.array([pmi.synergy(int(c), distinct) for c in pool], dtype=np.float32)
+
+
+def make_pmi_reranker(pmi: PMIModel, weight: float):
+    """Blend candidate scores with PPMI synergy against the partial deck —
+    swaps.py already uses this signal to judge which cards to cut
+    (rank_cuts); this applies it to ranking additions too, which recommend/
+    complete previously only showed as rationale text, never as ranking
+    input. weight=0 no-ops (recommend/complete keep today's behavior)."""
+
+    def reranker(
+        scores: np.ndarray, partial_idxs: np.ndarray, commander_idx: int | None
+    ) -> np.ndarray:
+        if weight <= 0:
+            return scores
+        pool = np.flatnonzero(np.isfinite(scores))
+        if pool.size < 2:
+            return scores
+        syn = pool_synergy(pmi, pool, partial_idxs)
+        ranks = syn.argsort().argsort()
+        norm_syn = np.zeros_like(scores)
+        norm_syn[pool] = ranks / max(pool.size - 1, 1)
+        return blend(scores, norm_syn, weight)
+
+    return reranker
 
 
 def step_reward(

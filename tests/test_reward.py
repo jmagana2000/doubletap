@@ -3,7 +3,14 @@ import pytest
 
 from doubletap.formats import COMMANDER
 from doubletap.ml.data import Vocab
-from doubletap.ml.reward import PMIModel, build_pmi, step_reward, structure_reward
+from doubletap.ml.reward import (
+    PMIModel,
+    build_pmi,
+    make_pmi_reranker,
+    pool_synergy,
+    step_reward,
+    structure_reward,
+)
 
 
 def sets(*decks):
@@ -55,6 +62,52 @@ def test_pmi_save_load_round_trip(tmp_path):
     loaded = PMIModel.load(path)
     assert loaded.n_decks == pmi.n_decks
     assert loaded.pairs == pytest.approx(pmi.pairs)
+
+
+def test_pool_synergy_matches_per_target_synergy():
+    corpus = sets(*([[0, 1, 2]] * 10 + [[3]] * 10))
+    pmi = build_pmi(corpus, vocab_size=4, min_count=2)
+    partial = np.array([1, 2], dtype=np.int64)
+    pool = np.array([0, 3], dtype=np.int64)
+    syn = pool_synergy(pmi, pool, partial)
+    assert syn[0] == pytest.approx(pmi.synergy(0, partial))
+    assert syn[1] == pytest.approx(pmi.synergy(3, partial))
+
+
+def test_pool_synergy_empty_partial_is_zero():
+    corpus = sets(*([[0, 1]] * 10))
+    pmi = build_pmi(corpus, vocab_size=2, min_count=2)
+    syn = pool_synergy(pmi, np.array([0, 1]), np.empty(0, dtype=np.int64))
+    assert (syn == 0.0).all()
+
+
+def test_pmi_reranker_boosts_synergistic_candidate():
+    # 0 and 1 always co-occur; 2 never co-occurs with either
+    corpus = sets(*([[0, 1]] * 15 + [[2]] * 15))
+    pmi = build_pmi(corpus, vocab_size=3, min_count=2)
+    partial = np.array([0], dtype=np.int64)
+    scores = np.array([1.0, 1.0, 5.0], dtype=np.float32)  # model favors 2
+
+    reranker = make_pmi_reranker(pmi, weight=1.0)
+    blended = reranker(scores, partial, commander_idx=None)
+    assert blended[1] > blended[2]  # synergy flips the model's own ranking
+
+
+def test_pmi_reranker_zero_weight_is_a_noop():
+    corpus = sets(*([[0, 1]] * 15))
+    pmi = build_pmi(corpus, vocab_size=2, min_count=2)
+    scores = np.array([1.0, 2.0], dtype=np.float32)
+    reranker = make_pmi_reranker(pmi, weight=0.0)
+    assert np.array_equal(reranker(scores, np.array([0], dtype=np.int64), None), scores)
+
+
+def test_pmi_reranker_respects_mask():
+    corpus = sets(*([[0, 1]] * 15))
+    pmi = build_pmi(corpus, vocab_size=2, min_count=2)
+    scores = np.array([-np.inf, 2.0], dtype=np.float32)
+    reranker = make_pmi_reranker(pmi, weight=1.0)
+    blended = reranker(scores, np.array([1], dtype=np.int64), None)
+    assert np.isneginf(blended[0])
 
 
 def _tiny_vocab(land_flags, **over):

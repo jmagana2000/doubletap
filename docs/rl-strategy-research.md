@@ -464,6 +464,39 @@ dims** (`FormatConfig.pip_state`, `data.state_dim(fmt)`) — commander
 ships 21 dims, modern keeps its 16-dim champion (recovery@50 53.77);
 `load_checkpoint` infers the dim from the stored weights.
 
+## Results (2026-07-21) — PMI-synergy reranker for additions, opt-in only
+
+`swaps.py` already uses PPMI synergy to judge which cards to *cut*
+(`rank_cuts`); `recommend`/`complete` only ever showed it as rationale
+text, never used it to rank which cards to *add*. Added
+`ml.reward.make_pmi_reranker` (blends model score with rank-normalized
+PPMI synergy against the partial deck, same `reranker` hook the
+goldfish reranker uses) and wired it up as `--synergy-weight` (default
+0, off) on `recommend` and `complete`.
+
+Quick directional check, commander, 40-deck holdout (not the full
+200-deck canonical split — this is a sanity check, not a keep-bar run):
+
+| weight | BC recovery@50 | CQL recovery@50 |
+|---|---|---|
+| 0.00 | 23.00 | 24.50 |
+| 0.15 | 25.50 | 26.75 |
+| 0.30 | 26.75 | 28.75 |
+
+Monotonic improvement with weight, consistent across both algorithms
+and all three k (10/50/100) — a real signal, not noise. **Shipped
+opt-in (default 0) rather than promoted to the shipped default**: the
+gain (+2.25 to +4.25 at recovery@50) would clear the standard +2 bar,
+but this was a 40-deck quick check, not the canonical 200-deck
+leakproof-split run the keep-bar protocol requires before flipping a
+default. Also noted: `pool_synergy`'s per-candidate Python loop costs
+~1.3s per call at commander's ~30k-candidate legal pool — acceptable
+for an opt-in flag, but means "on by default" would add real latency
+to every `recommend`/`complete` call, one more reason to gate it
+properly first rather than flip it on the strength of this sample.
+Follow-up, if wanted: full 200-deck run at seed 0 (+ 2-seed sweep if
+marginal) to decide whether `--synergy-weight` should default on.
+
 ## 5. Effort and order
 
 | Phase | Size | Depends on |

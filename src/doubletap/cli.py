@@ -731,6 +731,12 @@ def recommend(
         help="Blend weight for neighbor-deck frequencies (0 = model only): "
         "cards common in corpus decks similar to yours rank higher",
     ),
+    synergy_weight: float = typer.Option(
+        0.0,
+        "--synergy-weight",
+        help="Blend weight for PPMI synergy with the partial deck (0 = off): "
+        "the same signal swaps.py uses to judge cuts, applied to ranking additions",
+    ),
     deck_format: str = typer.Option(
         None,
         "--format",
@@ -757,7 +763,7 @@ def recommend(
     # _load_model's friendly "no trained model" message, not a traceback
     from .ml.eval import score_state
     from .ml.neighbors import blend, neighbor_frequencies
-    from .ml.reward import PMIModel
+    from .ml.reward import PMIModel, make_pmi_reranker
 
     pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
     pmi = PMIModel.load(pmi_path) if pmi_path.exists() else None
@@ -779,6 +785,9 @@ def recommend(
         if freqs is not None:
             scores = blend(scores, freqs, personalize)
             label += f", personalize={personalize}"
+    if synergy_weight > 0 and pmi is not None:
+        scores = make_pmi_reranker(pmi, synergy_weight)(scores, partial, commander_idx)
+        label += f", synergy_weight={synergy_weight}"
 
     top = np.argsort(-scores)[:k]
     typer.echo(f"Top {k} additions ({label}):")
@@ -826,6 +835,11 @@ def complete(
         help="Goldfish the completed deck, filling the land gap with basics"
         " split proportionally to the deck's colored pips",
     ),
+    synergy_weight: float = typer.Option(
+        0.0,
+        "--synergy-weight",
+        help="Blend weight for PPMI synergy with the deck built so far (0 = off)",
+    ),
 ):
     """Fill a partial deck's nonland slots with the model's top picks (greedy,
     re-scored after each add). Lands are reported as a gap, not added.
@@ -853,6 +867,14 @@ def complete(
         cap = max(0, 3 - already) if bracket == 3 else 0
         capped_idxs = np.array(sorted(gc_idxs), dtype=np.int64)
 
+    reranker = None
+    if synergy_weight > 0:
+        from .ml.reward import PMIModel, make_pmi_reranker
+
+        pmi_path = db.data_home() / "models" / f"pmi_{fmt.name}.npz"
+        if pmi_path.exists():
+            reranker = make_pmi_reranker(PMIModel.load(pmi_path), synergy_weight)
+
     added, final = complete_deck(
         model,
         vocab,
@@ -863,6 +885,7 @@ def complete(
         extra_mask,
         capped_idxs=capped_idxs,
         cap=cap,
+        reranker=reranker,
     )
     for idx in added:
         deck.entries[vocab.oracle_ids[idx]] += 1
