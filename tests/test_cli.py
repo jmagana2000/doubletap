@@ -67,6 +67,39 @@ def test_cards_lookup_found_and_missing(loaded_conn):
     assert result.exit_code == 1
 
 
+def test_deck_new_empty_then_collision_and_bad_format(loaded_conn):
+    from doubletap import db
+    from doubletap.decks import Deck
+
+    result = runner.invoke(app, ["deck", "new", "fresh"])
+    assert result.exit_code == 0, result.output
+    deck = Deck.load(db.decks_dir() / "fresh.json")
+    assert deck.format == "commander"
+    assert deck.size() == 0
+
+    # refuses to clobber an existing deck file
+    result = runner.invoke(app, ["deck", "new", "fresh"])
+    assert result.exit_code == 1
+    assert "already exists" in result.output
+
+    result = runner.invoke(app, ["deck", "new", "bogus", "-f", "klingon"])
+    assert result.exit_code == 1
+    assert "Unknown format" in result.output
+
+
+def test_deck_new_with_commander(loaded_conn):
+    from doubletap import db
+    from doubletap.decks import Deck
+
+    result = runner.invoke(
+        app, ["deck", "new", "cmdr-deck", "--commander", "Atraxa, Praetors' Voice"]
+    )
+    assert result.exit_code == 0, result.output
+    deck = Deck.load(db.decks_dir() / "cmdr-deck.json")
+    assert deck.commander == oid(loaded_conn, "Atraxa, Praetors' Voice")
+    assert deck.size() == 1
+
+
 # --- deck import / list / merge -------------------------------------------
 
 
@@ -410,6 +443,13 @@ def test_ml_pipeline_end_to_end(loaded_conn, tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert "bracket" not in result.output  # 4-5: unrestricted, no cap in play
+
+    # --colors combines with the mask (identity_mask itself is unit-tested
+    # directly in test_ml_data.py); this just checks the plumbing doesn't break
+    result = runner.invoke(
+        app, ["complete", "--deck", str(deck), "-o", str(out), "--colors", "WU"]
+    )
+    assert result.exit_code == 0, result.output
 
 
 def test_recommend_without_model_exits_cleanly(loaded_conn, tmp_path):

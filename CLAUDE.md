@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 DoubleTap is an MTG deck-building CLI (`doubletap`, Typer app in `src/doubletap/cli.py`): Scryfall card sync, deck import (CSV/photo/text), Commander/Modern/Standard rules validation, mana-base and goldfish-simulation analytics, and ML-based card recommendation (`recommend`/`complete`) trained offline on public decklists — no game simulator drives the model, no self-play. A local web UI (`doubletap web`) wraps the same CLI commands.
 
-Full user-facing docs: `README.md` (quickstart) and `docs/operating-manual.md` (complete reference — install, every command, maintenance, troubleshooting). Design history and experiment log: `docs/rl-strategy-research.md` (§Results is the running, date-stamped ledger of every model/reward/feature experiment — always read the **latest** dated section; earlier numbers are explicitly superseded there when metrics change) and `docs/goldfish-sim-design.md`.
+Full user-facing docs: `README.md` (quickstart) and `docs/operating-manual.md` (complete reference — install, every command, maintenance, troubleshooting). Design history and experiment log: `docs/rl-strategy-research.md` (§Results is the running, date-stamped ledger of every model/reward/feature experiment — always read the **latest** dated section; earlier numbers are explicitly superseded there when metrics change), `docs/goldfish-sim-design.md`, and `docs/vector-db-research.md` (verdict: no vector database, no embedding model feature — read before re-proposing either).
 
 ## Commands
 

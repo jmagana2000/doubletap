@@ -7,6 +7,7 @@ from doubletap.ml.data import (
     state_dim,
     action_mask,
     build_vocab,
+    identity_mask,
     load_corpus,
     sample_batch,
     state_features,
@@ -58,6 +59,20 @@ def test_action_mask_excludes_lands_copies_and_identity(loaded_conn, vocab):
     assert mask[rats]  # any-number exemption
     assert not mask[bolt]  # red, outside GWUB identity
     assert not mask[atraxa]  # the commander itself
+
+
+def test_identity_mask_restricts_to_chosen_colors(loaded_conn, vocab):
+    atraxa = vidx(loaded_conn, vocab, "Atraxa, Praetors' Voice")  # WUBG
+    bolt = vidx(loaded_conn, vocab, "Lightning Bolt")  # R
+    sol_ring = vidx(loaded_conn, vocab, "Sol Ring")  # colorless
+
+    mask = identity_mask(vocab, "WU")
+    assert not mask[atraxa]  # needs B and G too, outside WU
+    assert not mask[bolt]  # red
+    assert mask[sol_ring]  # colorless always fits
+
+    assert identity_mask(vocab, "wubg")[atraxa]  # case-insensitive
+    assert identity_mask(vocab, "")[sol_ring] and not identity_mask(vocab, "")[bolt]
 
 
 def test_action_mask_modern_copy_limit(loaded_conn):

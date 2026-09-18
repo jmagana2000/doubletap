@@ -236,7 +236,12 @@ New `formats.py` reward weights: `synergy_weight` unchanged; split
 - Per-card win-rate features — no Commander data source exists
 - Beatdown/tempo role assignment — gameplay-time, not deck-time
 - Oracle-text embeddings — deferred; heavy dependency, revisit if Phase
-  B plateaus
+  B plateaus. **Revisited 2026-07-23** (`docs/vector-db-research.md`):
+  Phase B did plateau, but its own failure analysis blames reward/CQL
+  credit assignment, not feature richness — no evidence embeddings would
+  help. Verdict stands as rejected; a separate, non-model "find similar
+  cards" lookup feature is documented (not built) in the same doc if a
+  real need for it shows up.
 
 ---
 

@@ -144,6 +144,17 @@ nothing matches.
 
 ### 3.2 `deck` — building and inspecting decks
 
+**`deck new NAME`** — create a new, empty deck saved to
+`~/.doubletap/decks/<NAME>.json`. Refuses to overwrite an existing deck
+file. Add cards with `deck add`; set the commander with `deck commander`
+if not given here.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `NAME` | required | Deck name; saved as `~/.doubletap/decks/<NAME>.json` |
+| `--format`, `-f` | `commander` | Deck format: `commander`, `modern`, or `standard` |
+| `--commander` | — | Card name to set as the commander |
+
 **`deck import PATH`** — routes by file extension: `.csv` (Moxfield/Archidekt
 exports), images (`.heic .jpg .jpeg .png .webp .tiff .bmp` → OCR), anything
 else as a plain-text list.
@@ -452,6 +463,7 @@ each add) and tells you how many lands remain to add.
 | `--bracket` | 3 | Target Commander Bracket for the result: 1–2 add no Game Changers, 3 caps the deck at three total (counting existing ones), 4–5 unrestricted. Ignored for Modern |
 | `--goldfish` | off | After completing, goldfish the result with the land gap filled by basics split proportionally to the deck's colored pips (simulation only — the saved deck still leaves the mana base to you) |
 | `--synergy-weight` | 0.3 | 0–1 blend of the model score with PPMI synergy against the deck built so far; re-applied after every greedy add; validated on Commander; 0 leaves ranking unchanged |
+| `--colors` | none | Restrict added cards to this WUBRG color identity (e.g. `WU`); empty keeps the deck's own commander-identity restriction, or no restriction at all without a commander |
 
 `--synergy-weight`'s default (0.3) is validated against 200-deck Commander
 and Modern holdouts. Standard uses the same default value but hasn't been
