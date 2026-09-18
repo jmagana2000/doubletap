@@ -112,6 +112,16 @@ You're ready to use all commands after this step.
 
 ## Everyday use
 
+### Starting a deck from scratch
+
+```bash
+doubletap deck new my-deck --format commander
+```
+Creates an empty deck at `~/.doubletap/decks/my-deck.json`. Add a commander
+right away with `--commander "Card Name"`, or set one later with
+`deck commander`. In the web UI, click **+ New** in the Deck Builder, then
+open any legendary creature in the card grid and click **Set commander**.
+
 ### Importing cards
 
 You can add cards from a photo of a physical card, a screenshot of a decklist,
@@ -374,6 +384,17 @@ doubletap complete --deck my-deck.json --max-card-price 5.00 -o budget.json
 ```
 This is per card, not per deck — a $1 cap builds a deck where every suggested
 card costs $1 or less.
+
+**Restrict `complete` to a specific color identity** with `--colors`, useful
+before a commander is set or to explore a narrower identity than your
+commander allows:
+```bash
+doubletap complete --deck my-deck.json --colors WU -o azorius.json
+```
+In the web UI, both **Recommend additions** and **Auto-complete a deck** on
+the Suggestions page have a color-identity picker that defaults to your
+selected deck's commander (or partner) colors — click a color to add or
+remove it from the restriction.
 
 ### Checking if a deck is legal
 

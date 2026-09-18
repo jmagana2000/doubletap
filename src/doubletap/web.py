@@ -177,6 +177,7 @@ def suggest_cards(
     personalize: float = 0.3,
     max_price: float | None = None,
     fmt_override: str = "",
+    colors: str = "",
 ) -> dict:
     """Structured recommendations for the builder and Suggestions pages:
     top-k additions with scores and synergy rationale, optionally filtered
@@ -198,6 +199,11 @@ def suggest_cards(
 
     partial, commander_idx, partner_idx = _deck_to_idxs(conn, deck, vocab, fmt)
     extra_mask = _budget_mask(conn, vocab, max_price) if max_price else None
+    if colors:
+        from .ml.data import identity_mask
+
+        cmask = identity_mask(vocab, colors)
+        extra_mask = cmask if extra_mask is None else (extra_mask & cmask)
     scores = score_state(
         model, vocab, fmt, partial, commander_idx, partner_idx, extra_mask
     )
@@ -259,7 +265,6 @@ def swap_suggestions(path: str, k: int = 5) -> dict:
     }
 
 
-
 def _deck_path_arg(raw: str) -> str:
     """Confine GET deck-path params to the decks directory (defense in
     depth — the API is localhost-only, but there is no reason these
@@ -271,6 +276,7 @@ def _deck_path_arg(raw: str) -> str:
     if not (path == decks_root or decks_root in path.parents):
         raise ValueError("path is outside the decks directory")
     return str(path)
+
 
 def deck_detail(path: str) -> dict:
     """One deck, structured for the builder: slots, per-card data, violations."""
@@ -386,7 +392,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, {"error": str(e)})
         elif url.path == "/api/swaps":
             try:
-                self._send(200, swap_suggestions(_deck_path_arg(qs["path"]), k=int(qs.get("k", "5"))))
+                self._send(
+                    200,
+                    swap_suggestions(
+                        _deck_path_arg(qs["path"]), k=int(qs.get("k", "5"))
+                    ),
+                )
             except Exception as e:
                 self._send(404, {"error": str(e)})
         elif url.path == "/api/suggest":
@@ -402,6 +413,7 @@ class Handler(BaseHTTPRequestHandler):
                         if qs.get("max_price")
                         else None,
                         fmt_override=qs.get("format", ""),
+                        colors=qs.get("colors", ""),
                     ),
                 )
             except Exception as e:

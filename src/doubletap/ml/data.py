@@ -143,6 +143,13 @@ def build_vocab(conn: sqlite3.Connection, fmt: FormatConfig) -> Vocab:
     )
 
 
+def identity_mask(vocab: Vocab, colors: str) -> np.ndarray:
+    """Vocab-length bool mask: True where a card's color identity fits
+    within the given WUBRG letters (colorless cards always fit)."""
+    bits = np.uint8(_identity_bits([c for c in colors.upper() if c in COLOR_ORDER]))
+    return (vocab.identity_bits & ~bits) == 0
+
+
 def action_mask(
     vocab: Vocab,
     fmt: FormatConfig,
@@ -229,7 +236,7 @@ def load_corpus(
         ok = True
         for oid, qty in conn.execute(
             "SELECT oracle_id, qty FROM deck_cards WHERE deck_id = ? ORDER BY oracle_id",
-            (deck_id,)
+            (deck_id,),
         ):
             if oid in commander_oids:
                 continue

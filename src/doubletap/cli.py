@@ -218,6 +218,46 @@ def deck_list():
         typer.echo(f"{f.stem:<32} {deck.format:<10} {deck.size():>5}  {detail}")
 
 
+@deck_app.command("new")
+def deck_new(
+    name: str = typer.Argument(
+        ..., help="Deck name (saved as ~/.doubletap/decks/<name>.json)"
+    ),
+    deck_format: str = typer.Option(
+        "commander",
+        "--format",
+        "-f",
+        help="Deck format: commander (default), modern, or standard",
+    ),
+    commander: str = typer.Option(None, help="Commander card name (Commander format)"),
+):
+    """Create a new, empty deck. Add cards with `deck add`; set or change the
+    commander later with `deck commander` if not given here."""
+    conn = db.connect()
+    try:
+        formats.get_format(deck_format)
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1)
+
+    path = db.decks_dir() / f"{name}.json"
+    if path.exists():
+        typer.echo(f"{path} already exists.", err=True)
+        raise typer.Exit(code=1)
+
+    deck = decks.Deck(format=deck_format)
+    commander_name = None
+    if commander:
+        deck.commander, commander_name = _resolve_one(conn, commander)
+
+    deck.save(conn, path)
+    typer.echo(
+        f"Created {deck_format} deck ({deck.size()} cards)"
+        + (f", commander: {commander_name}" if commander_name else "")
+        + f" → {path}"
+    )
+
+
 def _card_name_by_oid(conn, oid: str) -> str:
     row = conn.execute("SELECT name FROM cards WHERE oracle_id = ?", (oid,)).fetchone()
     return row[0] if row else oid
@@ -840,6 +880,12 @@ def complete(
         "--synergy-weight",
         help="Blend weight for PPMI synergy with the deck built so far (0 = off)",
     ),
+    colors: str = typer.Option(
+        "",
+        "--colors",
+        help="Restrict additions to this WUBRG color identity (e.g. 'WU');"
+        " empty keeps the deck's own commander-identity restriction",
+    ),
 ):
     """Fill a partial deck's nonland slots with the model's top picks (greedy,
     re-scored after each add). Lands are reported as a gap, not added.
@@ -860,6 +906,11 @@ def complete(
         if max_card_price is not None
         else None
     )
+    if colors:
+        from .ml.data import identity_mask
+
+        cmask = identity_mask(vocab, colors)
+        extra_mask = cmask if extra_mask is None else (extra_mask & cmask)
     capped_idxs, cap = None, 0
     if fmt.name == "commander" and bracket <= 3:
         gc_idxs = _game_changer_idxs(conn, vocab)
