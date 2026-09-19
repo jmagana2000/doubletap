@@ -37,6 +37,14 @@ command and option, maintenance procedures, and failure recovery — see the
 `http://127.0.0.1:8787` with every command available as a form — deck
 browser, import, card lookup, analysis, suggestions, and model training.
 It runs the exact same code as the CLI and never leaves your machine.
+Import takes a file picker (CSV, decklist, or card photo) and, when a name
+is ambiguous, shows a chooser so you can pick the intended card — or type
+the right name for a line nothing matched, like a misread photo — and retry
+instead of failing. The Deck Builder lists a deck's rule issues on click,
+filters the card grid by oracle text, rarity, and price, and can rename or
+duplicate decks. The Data & Models tab shows which checkpoint serves each
+format with its recorded accuracy, and asks before a training run
+overwrites it (or lets you train into a scratch directory instead).
 
 **Supported formats:** Commander (exactly 100 cards, one of each, including
 partner-commander and companion decks) and Modern (60-card minimum, up to 4
@@ -203,6 +211,15 @@ commander:
 ```bash
 doubletap deck commander ~/.doubletap/decks/my-deck.json
 ```
+
+**Rename or duplicate a deck:**
+```bash
+doubletap deck rename my-deck my-deck-v2
+doubletap deck copy   my-deck my-deck-budget
+```
+Both take a saved deck name (or a path) and a new name, and refuse to
+overwrite an existing deck. In the web UI these are the **Rename** and
+**Duplicate** buttons in the Deck Builder's shelf.
 
 **See every card in a deck:**
 ```bash
@@ -541,6 +558,27 @@ The first command trains the baseline model; the second trains the
 reinforcement-learning model that `recommend` prefers when available (each
 takes a few minutes to half an hour depending on corpus size). Both are
 saved to `~/.doubletap/models/` and picked up automatically.
+
+**Training overwrites the model that serves suggestions.** By default
+`train bc` and `train cql` write straight into `~/.doubletap/models/`, which
+is where `recommend`/`complete` load from — so a finished run replaces the
+serving model immediately. To experiment without that, train into a scratch
+directory:
+```bash
+doubletap train bc -f commander --out ~/scratch-models
+```
+The web UI's Train buttons ask for confirmation before overwriting, or take
+a "Save to" directory to do the same thing.
+
+When a scratch-trained checkpoint turns out better, promote it — this shows
+its recorded accuracy next to the current serving model's before copying:
+```bash
+doubletap train promote ~/scratch-models/cql_commander.pt --dry-run   # compare only
+doubletap train promote ~/scratch-models/cql_commander.pt             # make it live
+```
+In the web UI, a finished training run pre-fills the Evaluate and Promote
+fields with the new checkpoint, and **Promote…** shows the same comparison
+before asking.
 
 ### Evaluating model quality
 

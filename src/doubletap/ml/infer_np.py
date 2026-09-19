@@ -60,17 +60,34 @@ class NpTwoTowerQ:
 
 
 def save_np_checkpoint(
-    path: Path, state_dict: dict, oracle_ids: list, format_name: str, algo: str
+    path: Path,
+    state_dict: dict,
+    oracle_ids: list,
+    format_name: str,
+    algo: str,
+    metrics: dict | None = None,
 ) -> None:
-    """Write weights as an .npz next to the torch checkpoint."""
+    """Write weights as an .npz next to the torch checkpoint. `metrics` (the
+    holdout recovery@k the run measured) rides along so the UI can show what
+    the serving model scored without loading torch."""
     arrays = {k: v.detach().cpu().numpy() for k, v in state_dict.items()}
     arrays["__meta__"] = np.frombuffer(
         json.dumps(
-            {"oracle_ids": oracle_ids, "format": format_name, "algo": algo}
+            {
+                "oracle_ids": oracle_ids,
+                "format": format_name,
+                "algo": algo,
+                "metrics": metrics or {},
+            }
         ).encode(),
         dtype=np.uint8,
     )
     np.savez_compressed(path, **arrays)
+
+
+def read_np_meta(path: Path) -> dict:
+    """The JSON sidecar of a .npz checkpoint: oracle_ids, format, algo, metrics."""
+    return json.loads(bytes(np.load(path)["__meta__"]).decode())
 
 
 def load_np_checkpoint(path: Path, vocab: Vocab) -> tuple[NpTwoTowerQ, dict]:

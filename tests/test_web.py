@@ -19,6 +19,9 @@ ALL_COMMANDS = [
     ("cards", "sync"),
     ("cards", "lookup"),
     ("deck", "import"),
+    ("deck", "new"),
+    ("deck", "rename"),
+    ("deck", "copy"),
     ("deck", "list"),
     ("deck", "show"),
     ("deck", "add"),
@@ -40,6 +43,7 @@ ALL_COMMANDS = [
     ("train", "bc"),
     ("train", "cql"),
     ("train", "export"),
+    ("train", "promote"),
     ("eval", None),
     ("recommend", None),
     ("complete", None),
@@ -563,6 +567,127 @@ def test_ui_passes_format_args():
     assert 'args.push("--format", val("cmp-format"))' in html
     assert 'p.set("format", val("rec-format"))' in html
     assert 'id="cmp-format"' in html and 'id="rec-format"' in html
+
+
+def test_cards_search_text_rarity_price_filters(client):
+    # oracle-text filter: every hit contains the phrase, case-insensitively
+    hits = client.get("/api/cards", params={"text": "3 DAMAGE"}).json()
+    assert any(c["name"] == "Lightning Bolt" for c in hits)
+    assert all("3 damage" in c["oracle_text"].lower() for c in hits)
+
+    # rarity narrows the name search: the plain (non-mythic) Bolt drops out,
+    # and nothing appears that the unfiltered search didn't already have
+    bolts = {c["name"] for c in client.get("/api/cards", params={"q": "bolt"}).json()}
+    mythic = {
+        c["name"]
+        for c in client.get(
+            "/api/cards", params={"q": "bolt", "rarity": "mythic"}
+        ).json()
+    }
+    assert "Lightning Bolt" in bolts and "Lightning Bolt" not in mythic
+    assert mythic <= bolts
+    assert client.get("/api/cards", params={"rarity": "bogus"}).json() == []
+
+    # price cap: every hit is priced and under the cap — unpriced cards never
+    # qualify, since an unknown price is not "under $X"
+    cheap = client.get("/api/cards", params={"max_price": "1"}).json()
+    assert cheap and all(c["price"] is not None and c["price"] <= 1.0 for c in cheap)
+
+
+def test_models_endpoint(client):
+    import json as _json
+
+    import numpy as np
+
+    from doubletap import db
+
+    # nothing trained yet: one entry per format, all empty
+    models = client.get("/api/models").json()
+    assert [m["format"] for m in models] == ["commander", "modern", "standard"]
+    assert all(m["file"] is None for m in models)
+
+    # a torch-free .npz carries the run's metrics in __meta__
+    models_dir = db.data_home() / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "oracle_ids": [],
+        "format": "modern",
+        "algo": "bc",
+        "metrics": {"recovery": {"50": 32.1}},
+    }
+    np.savez_compressed(
+        models_dir / "bc_modern.npz",
+        __meta__=np.frombuffer(_json.dumps(meta).encode(), dtype=np.uint8),
+    )
+    modern = next(
+        m for m in client.get("/api/models").json() if m["format"] == "modern"
+    )
+    assert modern["file"] == "bc_modern.npz" and modern["algo"] == "bc"
+    assert modern["metrics"]["recovery"]["50"] == 32.1
+    assert modern["trained"]
+
+
+def test_import_file_upload(client):
+    import base64
+
+    text = "1 Sol Ring\n1 Juzám Djinn\n"  # non-ASCII rides the binary path
+    r = client.post(
+        "/api/import",
+        json={
+            "file_b64": base64.b64encode(text.encode("utf-8")).decode(),
+            "filename": "list.txt",
+            "args": [
+                "deck",
+                "import",
+                "@FILE@",
+                "-f",
+                "commander",
+                "--no-interactive",
+                "-o",
+                "@DECKS@/uploaded.json",
+            ],
+        },
+        headers=HEADERS,
+    )
+    assert r.status_code == 200 and r.json()["exit_code"] == 0, r.text
+    assert any(d["name"] == "uploaded" for d in client.get("/api/decks").json())
+
+    # the suffix is allowlisted, and the payload must actually be base64
+    bad = {"filename": "evil.sh", "file_b64": "", "args": ["deck", "import", "@FILE@"]}
+    assert client.post("/api/import", json=bad, headers=HEADERS).status_code == 400
+    notb64 = {
+        "filename": "x.txt",
+        "file_b64": "%%%",
+        "args": ["deck", "import", "@FILE@"],
+    }
+    assert client.post("/api/import", json=notb64, headers=HEADERS).status_code == 400
+
+
+def test_checkpoints_endpoint(client):
+    import json as _json
+
+    import numpy as np
+
+    from doubletap import db
+
+    assert client.get("/api/checkpoints").json() == []
+    models_dir = db.data_home() / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "bc_modern.pt").write_bytes(b"not really torch")
+    meta = {
+        "oracle_ids": [],
+        "format": "modern",
+        "algo": "bc",
+        "metrics": {"recovery": {"50": 32.1}},
+    }
+    np.savez_compressed(
+        models_dir / "bc_modern.npz",
+        __meta__=np.frombuffer(_json.dumps(meta).encode(), dtype=np.uint8),
+    )
+    (ckpt,) = client.get("/api/checkpoints").json()
+    assert ckpt["name"] == "bc_modern.pt"
+    assert ckpt["path"].endswith("bc_modern.pt")
+    assert ckpt["metrics"]["recovery"]["50"] == 32.1
 
 
 def test_no_unescaped_stringify_in_attributes():

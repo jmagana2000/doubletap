@@ -129,6 +129,7 @@ def save_checkpoint(
         vocab.oracle_ids,
         format_name,
         algo,
+        metrics,
     )
 
 

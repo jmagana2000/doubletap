@@ -52,3 +52,23 @@ data), and what's out of scope until the app itself grows the feature.
 | Card tags | No tagging system in the data model |
 | Deck notes | Deck JSON has no notes field |
 | React/Next.js + Tailwind + shadcn/ui + Framer Motion | Deliberate architecture decision, not a gap: the UI ships inside the Python package with zero build toolchain; a Node stack would break `uv tool install` distribution. The design goals were met in a self-contained SPA instead |
+
+## Nice-to-haves — from the 2026-09-18 UI review, logged for a later pass
+
+The seven "genuinely missing" items from that review shipped the same day
+(guarded training + `--out`, file-picker import, `--pick` ambiguity
+chooser, click-to-list issues, `deck rename`/`deck copy`, oracle-text /
+rarity / price search filters, serving-model status). These did not:
+
+| Item | Note |
+|---|---|
+| Gallery sort/filter (format, commander, date) | Fine at ~15 decks; painful past ~50 |
+| Card Lookup page reuses the Builder's card tiles, gains "add to current deck" | Today it's text-only CLI output; the Builder grid already does everything it does, better |
+| Undo after add/remove | A mis-click is a manual reverse today |
+| Search within the deck shelf | 100-card lists scroll |
+| Toasts instead of `alert()` for add/format/drop errors | Blocking native dialogs |
+| Game Changers listed inline on Analytics next to the Bracket badge | CLI `deck bracket` has the list; UI shows only the number |
+| ~~Evaluate: checkpoint dropdown instead of a typed path~~ | Done same day (second pass): `/api/checkpoints` feeds a datalist on Evaluate and Promote; a finished training run pre-fills both. Same pass also shipped `train promote` (keep-bar comparison before copying), `deck import --replace` for unmatched lines, Clear filters, and the Import/Suggestions copy fixes |
+| Home: "Start a new deck" CTA; fix the "cards catalogued" tile label | The tile counts cards *in decks*, not the ~31k-card database — reads like the latter |
+| Compare two decks on Analytics | Most-requested analytics feature in tools like this; out of scope for the data model today |
+| Phone-width layout verification | The review's resize check was inconclusive (the screenshot didn't reflect the resize) — unverified either way |
