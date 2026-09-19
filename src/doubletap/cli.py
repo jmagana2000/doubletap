@@ -99,6 +99,18 @@ def _prompt_chooser(line, matches):
     return None
 
 
+def _kv_pairs(values: list[str] | None, flag: str) -> dict[str, str]:
+    """Parse repeatable 'raw line=Card Name' options; malformed ones exit 1."""
+    pairs = {}
+    for v in values or []:
+        if "=" not in v:
+            typer.echo(f"{flag} needs 'raw line=Card Name', got {v!r}", err=True)
+            raise typer.Exit(code=1)
+        raw, name = v.split("=", 1)
+        pairs[raw.strip()] = name.strip()
+    return pairs
+
+
 @deck_app.command("import")
 def deck_import(
     path: Path = typer.Argument(..., exists=True, readable=True),
@@ -120,6 +132,19 @@ def deck_import(
     ),
     threshold: float = typer.Option(90.0, help="Fuzzy auto-accept score threshold"),
     interactive: bool = typer.Option(True, help="Prompt on ambiguous/unmatched names"),
+    pick: list[str] = typer.Option(
+        None,
+        "--pick",
+        help="Settle an ambiguous line without a prompt: 'raw line=Exact Card"
+        " Name' (repeatable; the raw line is shown in the 'ambiguous' output)",
+    ),
+    replace: list[str] = typer.Option(
+        None,
+        "--replace",
+        help="Substitute a line's card name before matching: 'raw line=Card"
+        " Name' (repeatable). For unmatched lines, where --pick has nothing to"
+        " pick from — e.g. a misread photo",
+    ),
 ):
     """Import a deck from a CSV, plain-text decklist, or decklist photo.
     Saved to ~/.doubletap/decks/ by default; use -o to override.
@@ -135,7 +160,25 @@ def deck_import(
         parsed.append(
             decks.ParsedLine(raw=companion, qty=1, name=companion, is_companion=True)
         )
-    chooser = _prompt_chooser if interactive and sys.stdin.isatty() else None
+    picks = {}
+    for p in pick or []:
+        if "=" not in p:
+            typer.echo(f"--pick needs 'raw line=Card Name', got {p!r}", err=True)
+            raise typer.Exit(code=1)
+        raw, chosen = p.split("=", 1)
+        picks[raw.strip()] = chosen.strip()
+    replaces = _kv_pairs(replace, "--replace")
+    for line in parsed:
+        if line.raw.strip() in replaces:
+            line.name = replaces[line.raw.strip()]
+    prompt = _prompt_chooser if interactive and sys.stdin.isatty() else None
+
+    def chooser(line, matches):
+        want = picks.get(line.raw.strip())
+        if want is not None:
+            return next((m for m in matches if m.name == want), None)
+        return prompt(line, matches) if prompt else None
+
     result = decks.resolve(
         conn, parsed, deck_format, threshold=threshold, chooser=chooser
     )
@@ -145,7 +188,7 @@ def deck_import(
             f"assumed   {res.matches[0].name}  <- {res.line.raw!r} ({res.matches[0].score:.1f})"
         )
     for res in result.ambiguous:
-        options = ", ".join(m.name for m in res.matches)
+        options = " | ".join(m.name for m in res.matches)  # names may contain commas
         typer.echo(f"ambiguous {res.line.raw!r}: {options}")
     for res in result.unmatched:
         typer.echo(f"unmatched {res.line.raw!r}")
@@ -412,6 +455,44 @@ def deck_remove(
     typer.echo(f"{deck.size()} cards → {path}")
 
 
+@deck_app.command("rename")
+def deck_rename(
+    name: str = typer.Argument(
+        ..., help="Deck file path or saved deck name (.json optional)"
+    ),
+    new_name: str = typer.Argument(
+        ..., help="New name (saved as ~/.doubletap/decks/<new_name>.json)"
+    ),
+):
+    """Rename a saved deck. Refuses to overwrite an existing deck."""
+    src = _deck_path(name)
+    dst = db.decks_dir() / f"{new_name}.json"
+    if dst.exists():
+        typer.echo(f"{dst} already exists.", err=True)
+        raise typer.Exit(code=1)
+    src.rename(dst)
+    typer.echo(f"Renamed {src.name} → {dst}")
+
+
+@deck_app.command("copy")
+def deck_copy(
+    name: str = typer.Argument(
+        ..., help="Deck file path or saved deck name (.json optional)"
+    ),
+    new_name: str = typer.Argument(
+        ..., help="Name for the copy (saved as ~/.doubletap/decks/<new_name>.json)"
+    ),
+):
+    """Duplicate a saved deck under a new name. Refuses to overwrite."""
+    src = _deck_path(name)
+    dst = db.decks_dir() / f"{new_name}.json"
+    if dst.exists():
+        typer.echo(f"{dst} already exists.", err=True)
+        raise typer.Exit(code=1)
+    dst.write_bytes(src.read_bytes())
+    typer.echo(f"Copied {src.name} → {dst}")
+
+
 def _deck_path(arg: str) -> Path:
     """Resolve a deck argument: an explicit path, or a saved deck name in
     ~/.doubletap/decks — the .json extension is optional either way."""
@@ -554,13 +635,25 @@ def train_bc_cmd(
     deck_format: str = typer.Option(..., "--format", "-f"),
     steps: int = typer.Option(1500),
     seed: int = typer.Option(0),
+    out: Path = typer.Option(
+        None,
+        "--out",
+        help="Directory to write the checkpoint into. Default is the live"
+        " ~/.doubletap/models dir, which overwrites the serving model in place;"
+        " point this at a scratch dir for experiments",
+    ),
 ):
     """Train the behavior-cloning baseline."""
     from .ml.train_bc import train_bc
 
     conn = db.connect()
     path = train_bc(
-        conn, formats.get_format(deck_format), steps=steps, seed=seed, log=typer.echo
+        conn,
+        formats.get_format(deck_format),
+        steps=steps,
+        seed=seed,
+        log=typer.echo,
+        out_dir=out.expanduser() if out else None,
     )
     typer.echo(f"Wrote {path}")
 
@@ -572,6 +665,14 @@ def train_cql_cmd(
     alpha: float = typer.Option(1.0, help="Conservative penalty weight"),
     seed: int = typer.Option(0),
     init_from_bc: bool = typer.Option(True, help="Initialize from the BC checkpoint"),
+    out: Path = typer.Option(
+        None,
+        "--out",
+        help="Directory to write the checkpoint into. Default is the live"
+        " ~/.doubletap/models dir, which overwrites the serving model in place;"
+        " point this at a scratch dir for experiments. --init-from-bc still"
+        " reads the live BC checkpoint",
+    ),
 ):
     """Train CQL on PPMI+structure rewards (A/B against BC on the same eval)."""
     from .ml.reward import PMIModel
@@ -594,6 +695,7 @@ def train_cql_cmd(
         seed=seed,
         init_from=init,
         log=typer.echo,
+        out_dir=out.expanduser() if out else None,
     )
     typer.echo(f"Wrote {path}")
 
@@ -616,11 +718,78 @@ def train_export():
             ckpt["oracle_ids"],
             ckpt["format"],
             ckpt["algo"],
+            ckpt.get("metrics"),
         )
         typer.echo(f"{pt.name} -> {pt.with_suffix('.npz').name}")
         converted += 1
     if not converted:
         typer.echo("No .pt checkpoints found in ~/.doubletap/models/")
+
+
+@train_app.command("promote")
+def train_promote(
+    src: Path = typer.Argument(
+        ...,
+        exists=True,
+        readable=True,
+        help="A checkpoint (.pt or .npz) to make the serving model for its format",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Only print the comparison; copy nothing"
+    ),
+):
+    """Copy a checkpoint (e.g. one trained with --out) into the live models
+    dir under its canonical name, after showing its recorded holdout
+    recovery@50 next to the current serving model's. Serving order is
+    unchanged: cql_<format> is preferred over bc_<format> when both exist."""
+    import shutil
+
+    from .ml.infer_np import read_np_meta
+
+    def r50(meta):
+        return (meta.get("metrics") or {}).get("recovery", {}).get("50")
+
+    npz = src.with_suffix(".npz")
+    if not npz.exists():
+        typer.echo(
+            f"{npz} not found; promotion needs the .npz (train export).", err=True
+        )
+        raise typer.Exit(code=1)
+    meta = read_np_meta(npz)
+    fmt, algo, cand = meta["format"], meta["algo"], r50(meta)
+    live = db.data_home() / "models"
+    serving = next(
+        (
+            live / f"{a}_{fmt}.npz"
+            for a in ("cql", "bc")
+            if (live / f"{a}_{fmt}.npz").exists()
+        ),
+        None,
+    )
+    typer.echo(
+        f"Candidate: {algo}_{fmt}  recovery@50 {cand if cand is not None else '?'}  ({npz})"
+    )
+    if serving is None:
+        typer.echo(f"Serving:   none for {fmt}")
+    else:
+        cur = r50(read_np_meta(serving))
+        typer.echo(
+            f"Serving:   {serving.name}  recovery@50 {cur if cur is not None else '?'}"
+        )
+        if cand is not None and cur is not None:
+            typer.echo(f"Δ recovery@50: {cand - cur:+.2f}")
+    if dry_run:
+        return
+    live.mkdir(parents=True, exist_ok=True)
+    dest = live / f"{algo}_{fmt}.npz"
+    if npz.resolve() == dest.resolve():
+        typer.echo("Already the live checkpoint; nothing to do.")
+        return
+    shutil.copy2(npz, dest)
+    pt = src.with_suffix(".pt")
+    if pt.exists():
+        shutil.copy2(pt, dest.with_suffix(".pt"))
+    typer.echo(f"Promoted → {dest}" + (" (+ .pt)" if pt.exists() else ""))
 
 
 @app.command("eval")

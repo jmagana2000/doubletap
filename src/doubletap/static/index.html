@@ -349,7 +349,8 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
     <div class="stat"><div id="sum-curve"></div><span>curve</span></div>
     <div class="stat"><span id="sum-commander" style="font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0">—</span><span>commander</span></div>
     <div class="stat"><b id="sum-price" style="color:var(--gold)">—</b><span>price</span></div>
-    <span id="sum-legal" class="badge ok" style="margin-left:auto">—</span>
+    <span id="sum-legal" class="badge ok" style="margin-left:auto;cursor:pointer" title="Click to list the issues">—</span>
+    <div id="sum-issues" hidden style="width:100%;color:var(--gold);font-size:12.5px;line-height:1.7"></div>
   </div>
 
   <!-- left rail: filters -->
@@ -378,6 +379,19 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
       <h3>Max mana value <span id="mv-out">any</span></h3>
       <input id="mv" type="range" min="0" max="9" value="9" style="width:100%"
              oninput="setMv(this.value)">
+      <h3>Card text</h3>
+      <input id="ftext" placeholder="draw a card, flying…" style="width:100%" oninput="setText(this.value)">
+      <h3>Rarity</h3>
+      <div class="type-chips" id="rarity-chips">
+        <button class="chip on" data-r="">Any rarity</button>
+        <button class="chip" data-r="common">Common</button>
+        <button class="chip" data-r="uncommon">Uncommon</button>
+        <button class="chip" data-r="rare">Rare</button>
+        <button class="chip" data-r="mythic">Mythic</button>
+      </div>
+      <h3>Max price $</h3>
+      <input id="fprice" type="number" min="0" step="0.5" placeholder="any" style="width:100%" oninput="setPrice(this.value)">
+      <button class="ghost" style="width:100%;margin-top:14px" onclick="clearFilters()">Clear filters</button>
     </div>
   </aside>
 
@@ -407,6 +421,8 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
         <button class="ghost" data-cmd="deck price"    onclick="shelfAction('price')">Price</button>
       <button class="ghost" data-cmd="deck goldfish" onclick="shelfAction('goldfish')">Goldfish</button>
       <button class="ghost" data-cmd="deck manabase" onclick="shelfAction('manabase')">Manabase</button>
+      <button class="ghost" data-cmd="deck rename" onclick="renameDeck()">Rename</button>
+      <button class="ghost" data-cmd="deck copy" onclick="copyDeck()">Duplicate</button>
       <button class="ghost" data-cmd="deck format" onclick="changeFormat()">Format</button>
       <button class="ghost" data-cmd="deck drop" onclick="dropDeck()" style="color:#e06c75">Drop</button>
       </div>
@@ -434,7 +450,7 @@ td{padding:8px 10px;border-bottom:1px solid rgba(42,47,60,.6)}
 <!-- ===================== IMPORT ===================== -->
 <section id="import">
   <h2>Import a deck</h2>
-  <p class="sub">Paste a decklist, or give the path of a CSV export or a card photo on this machine.</p>
+  <p class="sub">Paste a decklist, or pick a CSV export, .txt decklist, or card photo from this machine. Ambiguous or unmatched names get a chooser instead of a failed import.</p>
 
   <div class="card" data-cmd="deck import">
     <h3>Paste a decklist</h3>
@@ -451,16 +467,18 @@ Deck
       <button onclick="importText()">Import</button>
     </div>
     <pre class="out" id="imp-out"></pre>
+    <div id="imp-out-pick"></div>
   </div>
 
   <div class="card">
-    <h3>From a file on this machine (CSV or photo)</h3>
+    <h3>From a file on this machine (CSV, .txt decklist, or photo)</h3>
     <div class="row">
-      <div style="flex:1"><label>File path</label><input id="impf-path" placeholder="/Users/you/Downloads/IMG_1234.HEIC" style="width:100%"></div>
+      <div style="flex:1"><label>File (CSV export, .txt decklist, or card photo)</label><input id="impf-file" type="file" accept=".csv,.txt,.jpg,.jpeg,.png,.heic,.webp,.tiff,.bmp" style="width:100%"></div>
       <div><label>Format</label><select id="impf-format"><option>commander</option><option>modern</option><option>standard</option></select></div>
       <button onclick="importFile()">Import</button>
     </div>
     <pre class="out" id="impf-out"></pre>
+    <div id="impf-out-pick"></div>
   </div>
 
   <div class="card" data-cmd="deck merge">
@@ -502,6 +520,7 @@ Deck
 <section id="suggest">
   <h2>Suggestions</h2>
   <p class="sub">Model-driven card recommendations. Needs a trained model (Data &amp; Models tab).</p>
+  <div id="suggest-serving" class="hint" style="color:var(--gold);margin:-6px 0 14px;line-height:1.7"></div>
 
   <div class="card" data-cmd="recommend">
     <h3>Recommend additions</h3>
@@ -553,6 +572,12 @@ Deck
   <h2>Data &amp; models</h2>
   <p class="sub">Build the training corpus and models behind Suggestions. Long-running commands block until done — leave the tab open.</p>
 
+  <div class="card">
+    <h3>Serving models</h3>
+    <p class="hint">What <code>recommend</code>/<code>complete</code> load for each format, with the holdout recovery@k that run recorded.</p>
+    <div id="models-list">—</div>
+  </div>
+
   <div class="card" data-cmd="corpus stats">
     <h3>Corpus</h3>
     <div class="row">
@@ -570,14 +595,20 @@ Deck
     <div class="row">
       <div><label>Format</label><select id="train-format"><option>commander</option><option>modern</option><option>standard</option></select></div>
       <div><label>Steps</label><input id="train-steps" type="number" value="1500" style="width:100px"></div>
-      <button onclick="runInto(['train','bc','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train BC</button>
-      <button data-cmd="train cql" class="ghost" onclick="runInto(['train','cql','-f',val('train-format'),'--steps',val('train-steps')],'train-out',this)">Train CQL</button>
+      <div><label>Save to (optional scratch dir)</label><input id="train-dir" placeholder="blank = live models dir" size="24"></div>
+      <button onclick="trainModel('bc', this)">Train BC</button>
+      <button data-cmd="train cql" class="ghost" onclick="trainModel('cql', this)">Train CQL</button>
       <button data-cmd="train export" class="ghost" onclick="runInto(['train','export'],'train-out',this)">Export weights (.npz)</button>
     </div>
     <div class="row" data-cmd="eval">
-      <div style="flex:1"><label>Checkpoint path (for eval)</label><input id="eval-model" placeholder="~/.doubletap/models/bc_commander.pt" style="width:100%"></div>
+      <div style="flex:1"><label>Checkpoint path (for eval)</label><input id="eval-model" list="ckpt-list" placeholder="~/.doubletap/models/bc_commander.pt" style="width:100%"></div>
       <button class="ghost" onclick="runInto(['eval','--model',val('eval-model')],'train-out',this)">Evaluate</button>
     </div>
+    <div class="row" data-cmd="train promote">
+      <div style="flex:1"><label>Promote a checkpoint to serving (e.g. one trained into "Save to")</label><input id="promote-src" list="ckpt-list" placeholder="/path/to/scratch/cql_commander.pt" style="width:100%"></div>
+      <button class="ghost" onclick="promoteCheckpoint(this)">Promote…</button>
+    </div>
+    <datalist id="ckpt-list"></datalist>
     <pre class="out" id="train-out"></pre>
   </div>
 </section>
@@ -642,6 +673,7 @@ function nav(name) {
   if (name === "home") renderHome();
   if (name === "gallery") renderGallery();
   if (name === "analytics") loadAnalytics();
+  if (name === "data" || name === "suggest") loadModels();
 }
 document.querySelectorAll("nav a[data-nav]").forEach(a => a.onclick = () => nav(a.dataset.nav));
 function goBuilder(path) { nav("builder"); pickDeck(path); }
@@ -676,7 +708,7 @@ function manaPips(cost){
 }
 
 /* ---------- builder state ---------- */
-const state = { deck: null, colors: new Set(), type: "", maxMv: "", q: "" };
+const state = { deck: null, colors: new Set(), type: "", maxMv: "", q: "", text: "", rarity: "", maxPrice: "" };
 
 async function loadDecks() {
   const decks = await (await fetch("/api/decks")).json();
@@ -732,6 +764,7 @@ function renderShelf(d) {
       <h3>The shelf stands empty</h3>Import a deck to begin building.</div>`;
     ["sum-count","sum-identity","sum-commander","sum-price"].forEach(i => $(i).textContent = "—");
     $("sum-curve").innerHTML = ""; $("sum-legal").textContent = "—";
+    $("sum-issues").hidden = true;
     return;
   }
   $("shelf-title").textContent = d.name;
@@ -786,7 +819,10 @@ function renderShelf(d) {
   const v = d.violations.length;
   $("sum-legal").textContent = v ? `${v} issue${v>1?"s":""}` : "✓ Legal";
   $("sum-legal").className = "badge " + (v ? "warn" : "ok");
-  $("sum-legal").title = d.violations.join("\n");
+  $("sum-legal").title = v ? "Click to list the issues" : "";
+  $("sum-issues").innerHTML = d.violations.map(x => `<div>⚠ ${esc(x)}</div>`).join("");
+  if (!v) $("sum-issues").hidden = true;
+  $("sum-legal").onclick = () => { if (v) $("sum-issues").hidden = !$("sum-issues").hidden; };
 }
 
 async function mutate(action, name) {
@@ -920,6 +956,24 @@ async function dropDeck() {
   renderShelf(null);
   loadDecks();
 }
+async function renameDeck() {
+  if (!state.deck) return;
+  const name = prompt("New deck name:", state.deck.name);
+  if (!name || !name.trim() || name.trim() === state.deck.name) return;
+  const res = await run(["deck", "rename", state.deck.path, name.trim()]);
+  if (res.exit_code !== 0) { alert(res.output.trim()); return; }
+  await pickDeck(state.deck.path.replace(/\/[^/]+$/, "") + "/" + name.trim() + ".json");
+  loadDecks();
+}
+async function copyDeck() {
+  if (!state.deck) return;
+  const name = prompt("Name for the copy:", state.deck.name + "-copy");
+  if (!name || !name.trim()) return;
+  const res = await run(["deck", "copy", state.deck.path, name.trim()]);
+  if (res.exit_code !== 0) { alert(res.output.trim()); return; }
+  await pickDeck(state.deck.path.replace(/\/[^/]+$/, "") + "/" + name.trim() + ".json");
+  loadDecks();
+}
 async function newDeck() {
   const name = prompt("New deck name:");
   if (!name || !name.trim()) return;
@@ -949,6 +1003,9 @@ async function searchCards() {
   if (state.colors.size) p.set("colors", [...state.colors].join(""));
   if (state.type) p.set("type", state.type);
   if (state.maxMv !== "") p.set("max_mv", state.maxMv);
+  if (state.text) p.set("text", state.text);
+  if (state.rarity) p.set("rarity", state.rarity);
+  if (state.maxPrice) p.set("max_price", state.maxPrice);
   p.set("format", state.deck?.format || "commander");
   const cards = await (await fetch("/api/cards?" + p)).json();
   if (seq !== searchSeq) return; // a newer search superseded this one
@@ -988,6 +1045,21 @@ document.querySelectorAll("#type-chips .chip").forEach(ch => ch.onclick = () => 
 function setMv(v) {
   state.maxMv = v === "9" ? "" : v;
   $("mv-out").textContent = v === "9" ? "any" : "≤ " + v;
+  queueSearch();
+}
+function setText(v) { state.text = v.trim(); queueSearch(); }
+function setPrice(v) { state.maxPrice = v; queueSearch(); }
+document.querySelectorAll("#rarity-chips .chip").forEach(ch => ch.onclick = () => {
+  document.querySelectorAll("#rarity-chips .chip").forEach(x => x.classList.remove("on"));
+  ch.classList.add("on"); state.rarity = ch.dataset.r; queueSearch();
+});
+function clearFilters() {
+  Object.assign(state, { colors: new Set(), type: "", maxMv: "", q: "", text: "", rarity: "", maxPrice: "" });
+  document.querySelectorAll(".mana-filters .mana-btn").forEach(b => b.classList.remove("on"));
+  document.querySelectorAll("#type-chips .chip").forEach(c => c.classList.toggle("on", c.dataset.t === ""));
+  document.querySelectorAll("#rarity-chips .chip").forEach(c => c.classList.toggle("on", c.dataset.r === ""));
+  $("search").value = ""; $("ftext").value = ""; $("fprice").value = "";
+  $("mv").value = "9"; $("mv-out").textContent = "any";
   queueSearch();
 }
 
@@ -1030,6 +1102,41 @@ async function setCommanderFromModal(name){
 }
 
 /* ---------- import ---------- */
+/* shared import poster: shows the CLI output and, when it reports ambiguous
+   lines, renders a chooser that retries the same import with --pick per line */
+async function postImport(body, outId, extra = []) {
+  const args = [...body.args, ...extra];
+  const r = await fetch("/api/import", {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "X-DoubleTap": "1"},
+    body: JSON.stringify({...body, args})
+  });
+  const res = await r.json();
+  const out = $(outId);
+  out.textContent = res.output || res.error || "(no output)";
+  out.className = "out show" + (res.exit_code ? " err" : "");
+  const box = $(outId + "-pick");
+  box.innerHTML = "";
+  const text = res.output || "";
+  const amb = [...text.matchAll(/^ambiguous (['"])(.*?)\1: (.+)$/gm)];
+  const unm = [...text.matchAll(/^unmatched (['"])(.*?)\1$/gm)];
+  if (res.exit_code && (amb.length || unm.length)) {
+    box.innerHTML = `<div class="hint">Settle each line, then retry — pick from the candidates, or type the exact card name where nothing matched:</div>` +
+      amb.map(([, , raw, opts]) => `<div class="row"><label>${esc(raw)}</label>
+        <select data-raw="${esc(raw)}">${opts.split(" | ").map(o => `<option>${esc(o)}</option>`).join("")}</select></div>`).join("") +
+      unm.map(([, , raw]) => `<div class="row"><label>${esc(raw)}</label>
+        <input data-raw="${esc(raw)}" placeholder="exact card name" size="28"></div>`).join("") +
+      `<button class="ghost" id="${outId}-retry">Resolve &amp; retry</button>`;
+    // settled lines stop appearing in the output, so earlier answers must
+    // be carried forward on every retry, not rebuilt from the current box
+    $(outId + "-retry").onclick = () => postImport(body, outId, [
+      ...extra,
+      ...[...box.querySelectorAll("select")].flatMap(s => ["--pick", s.dataset.raw + "=" + s.value]),
+      ...[...box.querySelectorAll("input")].filter(i => i.value.trim()).flatMap(i => ["--replace", i.dataset.raw + "=" + i.value.trim()]),
+    ]);
+  }
+  loadDecks();
+}
 async function importText() {
   const text = $("imp-text").value;
   if (!text.trim()) return;
@@ -1037,21 +1144,19 @@ async function importText() {
   if (val("imp-name")) args.push("-o", "@DECKS@/" + val("imp-name") + ".json");
   if (val("imp-commander")) args.push("--commander", val("imp-commander"));
   if (val("imp-companion")) args.push("--companion", val("imp-companion"));
-  const r = await fetch("/api/import", {
-    method: "POST",
-    headers: {"Content-Type": "application/json", "X-DoubleTap": "1"},
-    body: JSON.stringify({text, args})
-  });
-  const res = await r.json();
-  const out = $("imp-out");
-  out.textContent = res.output || res.error || "(no output)";
-  out.className = "out show" + (res.exit_code ? " err" : "");
-  loadDecks();
+  await postImport({text, args}, "imp-out");
 }
 async function importFile() {
-  if (!val("impf-path")) return;
-  await runInto(["deck", "import", val("impf-path"), "-f", val("impf-format"), "--no-interactive"], "impf-out");
-  loadDecks();
+  const file = $("impf-file").files[0];
+  if (!file) return;
+  const file_b64 = await new Promise((ok, err) => {
+    const fr = new FileReader();
+    fr.onload = () => ok(fr.result.split(",")[1]);
+    fr.onerror = err;
+    fr.readAsDataURL(file);
+  });
+  const args = ["deck", "import", "@FILE@", "-f", val("impf-format"), "--no-interactive"];
+  await postImport({file_b64, filename: file.name, args}, "impf-out");
 }
 async function mergeDecks() {
   const chosen = [...$("merge-decks").selectedOptions].map(o => o.value);
@@ -1090,6 +1195,45 @@ async function completeDeck(saveInPlace) {
   await runInto(args, "cmp-out-pre");
   $("cmp-spin").classList.remove("show");
   loadDecks();
+}
+/* ---------- serving-model status + guarded training ---------- */
+async function loadModels() {
+  let models = [], ckpts = [];
+  try { models = await (await fetch("/api/models")).json(); } catch {}
+  try { ckpts = await (await fetch("/api/checkpoints")).json(); } catch {}
+  const line = m => {
+    if (!m.file) return `<b>${esc(m.format)}</b> — no trained model`;
+    const r50 = m.metrics?.recovery?.["50"];
+    return `<b>${esc(m.format)}</b> — ${esc(m.file)}` +
+      (r50 != null ? ` · recovery@50 <b>${r50}</b>` : " · metrics unknown (re-run Export weights)") +
+      (m.trained ? ` · trained ${esc(m.trained)}` : "");
+  };
+  $("models-list").innerHTML = models.map(m => `<div>${line(m)}</div>`).join("") || "—";
+  const served = models.filter(m => m.file);
+  $("suggest-serving").innerHTML = served.length
+    ? "Serving: " + served.map(m => `<div>${line(m)}</div>`).join("")
+    : "";
+  $("ckpt-list").innerHTML = ckpts.map(c => `<option value="${esc(c.path)}">${esc(c.name)}${c.metrics?.recovery?.["50"] != null ? ` · r@50 ${c.metrics.recovery["50"]}` : ""}</option>`).join("");
+}
+async function trainModel(algo, btn) {
+  const fmt = val("train-format");
+  const args = ["train", algo, "-f", fmt, "--steps", val("train-steps") || "1500"];
+  if (val("train-dir")) args.push("--out", val("train-dir"));
+  else if (!confirm(`Train ${algo.toUpperCase()} for ${fmt}?\n\nThis OVERWRITES the serving ${algo}_${fmt} checkpoint in place — recommend/complete will use the new model immediately.\n\nTo experiment safely instead, cancel and fill in "Save to" with a scratch directory.`)) return;
+  await runInto(args, "train-out", btn);
+  // close the loop: the freshly written checkpoint is what you evaluate or promote next
+  const wrote = $("train-out").textContent.match(/^Wrote (.+)$/m);
+  if (wrote) { $("eval-model").value = wrote[1].trim(); $("promote-src").value = wrote[1].trim(); }
+  loadModels();
+}
+async function promoteCheckpoint(btn) {
+  const src = val("promote-src");
+  if (!src) return;
+  const dry = await run(["train", "promote", src, "--dry-run"]);
+  if (dry.exit_code !== 0) { alert(dry.output.trim()); return; }
+  if (!confirm(dry.output.trim() + "\n\nMake this the serving model? recommend/complete will use it immediately.")) return;
+  await runInto(["train", "promote", src], "train-out", btn);
+  loadModels();
 }
 function crawl() {
   runInto(["corpus", "crawl", "-f", val("crawl-format"), "--max", val("crawl-max") || "1000"], "corpus-out");

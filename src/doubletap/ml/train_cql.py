@@ -83,6 +83,7 @@ def train_cql(
     init_from: Path | None = None,
     shaper=None,
     log=print,
+    out_dir: Path | None = None,
 ) -> Path:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
@@ -136,7 +137,7 @@ def train_cql(
     metrics["train_decks"] = len(train)
     log(f"holdout recovery@k: {metrics['recovery']} over {metrics['decks']} decks")
 
-    out = data_home() / "models"
+    out = out_dir or data_home() / "models"
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"cql_{fmt.name}.pt"
     save_checkpoint(path, model, vocab, fmt.name, "cql", metrics)

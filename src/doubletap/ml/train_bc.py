@@ -137,6 +137,7 @@ def train_awr(
     lr: float = 1e-3,
     seed: int = 0,
     log=print,
+    out_dir: Path | None = None,
 ) -> Path:
     """Advantage-weighted regression: BC re-weighted by goldfish deltas.
     Stays inside the data distribution (no TD, no conservatism knob) while
@@ -171,7 +172,7 @@ def train_awr(
     metrics["train_decks"] = len(train)
     log(f"holdout recovery@k: {metrics['recovery']} over {metrics['decks']} decks")
 
-    out = data_home() / "models"
+    out = out_dir or data_home() / "models"
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"awr_{fmt.name}.pt"
     save_checkpoint(path, model, vocab, fmt.name, "awr", metrics)
@@ -187,6 +188,7 @@ def train_bc(
     lr: float = 1e-3,
     seed: int = 0,
     log=print,
+    out_dir: Path | None = None,
 ) -> Path:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
@@ -216,7 +218,7 @@ def train_bc(
     metrics["train_decks"] = len(train)
     log(f"holdout recovery@k: {metrics['recovery']} over {metrics['decks']} decks")
 
-    out = data_home() / "models"
+    out = out_dir or data_home() / "models"
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"bc_{fmt.name}.pt"
     save_checkpoint(path, model, vocab, fmt.name, "bc", metrics)

@@ -100,6 +100,115 @@ def test_deck_new_with_commander(loaded_conn):
     assert deck.size() == 1
 
 
+def test_deck_rename_and_copy(loaded_conn):
+    from doubletap import db
+
+    assert runner.invoke(app, ["deck", "new", "orig"]).exit_code == 0
+    result = runner.invoke(app, ["deck", "copy", "orig", "dupe"])
+    assert result.exit_code == 0, result.output
+    assert (db.decks_dir() / "dupe.json").exists()
+    assert (db.decks_dir() / "orig.json").exists()  # copy leaves the source
+
+    result = runner.invoke(app, ["deck", "rename", "orig", "moved"])
+    assert result.exit_code == 0, result.output
+    assert (db.decks_dir() / "moved.json").exists()
+    assert not (db.decks_dir() / "orig.json").exists()
+
+    # neither will clobber an existing deck
+    assert runner.invoke(app, ["deck", "rename", "moved", "dupe"]).exit_code == 1
+    assert runner.invoke(app, ["deck", "copy", "moved", "dupe"]).exit_code == 1
+
+
+def test_deck_import_pick_settles_ambiguity(loaded_conn, tmp_path):
+    import re
+
+    from doubletap.decks import Deck
+
+    src = write_decklist(tmp_path, body="1 lightning blot\n")
+    out = tmp_path / "picked.json"
+    base = [
+        "deck",
+        "import",
+        str(src),
+        "-f",
+        "modern",
+        "--no-interactive",
+        "-o",
+        str(out),
+    ]
+    result = runner.invoke(app, base)
+    assert result.exit_code == 1
+    # the raw line is quoted the way the web chooser parses it; options are |-separated
+    m = re.search(r"^ambiguous (['\"])(.*?)\1: (.+)$", result.output, re.M)
+    assert m and "Lightning Bolt" in m.group(3).split(" | ")
+
+    result = runner.invoke(app, [*base, "--pick", f"{m.group(2)}=Lightning Bolt"])
+    assert result.exit_code == 0, result.output
+    assert oid(loaded_conn, "Lightning Bolt") in Deck.load(out).entries
+
+    # malformed --pick is a clean error, not a traceback
+    assert runner.invoke(app, [*base, "--pick", "nope"]).exit_code == 1
+
+
+def test_deck_import_replace_settles_unmatched(loaded_conn, tmp_path):
+    from doubletap.decks import Deck
+
+    src = write_decklist(tmp_path, body="1 Zzyzx Quuxblade\n")
+    out = tmp_path / "replaced.json"
+    base = ["deck", "import", str(src), "--no-interactive", "-o", str(out)]
+    result = runner.invoke(app, base)
+    assert result.exit_code == 1
+    assert "unmatched '1 Zzyzx Quuxblade'" in result.output
+
+    # --replace swaps the name in before matching, so a misread line resolves
+    result = runner.invoke(app, [*base, "--replace", "1 Zzyzx Quuxblade=Sol Ring"])
+    assert result.exit_code == 0, result.output
+    assert oid(loaded_conn, "Sol Ring") in Deck.load(out).entries
+    assert runner.invoke(app, [*base, "--replace", "nope"]).exit_code == 1
+
+
+def _fake_checkpoint(directory, algo, fmt, r50, pt_bytes=b"not really torch"):
+    """A torch-free stand-in: the .pt is opaque bytes (promote never loads
+    it), the .npz carries the metrics sidecar the tooling reads."""
+    import json as _json
+
+    import numpy as np
+
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{algo}_{fmt}.pt").write_bytes(pt_bytes)
+    meta = {
+        "oracle_ids": [],
+        "format": fmt,
+        "algo": algo,
+        "metrics": {"recovery": {"50": r50}},
+    }
+    np.savez_compressed(
+        directory / f"{algo}_{fmt}.npz",
+        __meta__=np.frombuffer(_json.dumps(meta).encode(), dtype=np.uint8),
+    )
+    return directory / f"{algo}_{fmt}.pt"
+
+
+def test_train_promote_copies_scratch_checkpoint_into_live(loaded_conn, tmp_path):
+    from doubletap import db
+    from doubletap.ml.infer_np import read_np_meta
+
+    live = db.data_home() / "models"
+    cand = _fake_checkpoint(tmp_path / "scratch", "cql", "commander", 25.0, b"cand")
+
+    result = runner.invoke(app, ["train", "promote", str(cand), "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "Serving:   none for commander" in result.output
+    assert not (live / "cql_commander.npz").exists()  # dry run copies nothing
+
+    _fake_checkpoint(live, "cql", "commander", 23.7, b"live")
+    result = runner.invoke(app, ["train", "promote", str(cand)])
+    assert result.exit_code == 0, result.output
+    assert "Δ recovery@50: +1.30" in result.output and "Promoted" in result.output
+    assert read_np_meta(live / "cql_commander.npz")["metrics"]["recovery"]["50"] == 25.0
+    assert (live / "cql_commander.pt").read_bytes() == b"cand"
+
+
 # --- deck import / list / merge -------------------------------------------
 
 
@@ -450,6 +559,17 @@ def test_ml_pipeline_end_to_end(loaded_conn, tmp_path):
         app, ["complete", "--deck", str(deck), "-o", str(out), "--colors", "WU"]
     )
     assert result.exit_code == 0, result.output
+
+    # --out trains into a scratch dir and leaves the serving checkpoint alone
+    live_before = bc_ckpt.read_bytes()
+    scratch = tmp_path / "scratch"
+    result = runner.invoke(
+        app, ["train", "bc", "-f", "commander", "--steps", "2", "--out", str(scratch)]
+    )
+    assert result.exit_code == 0, result.output
+    assert (scratch / "bc_commander.pt").exists()
+    assert (scratch / "bc_commander.npz").exists()
+    assert bc_ckpt.read_bytes() == live_before
 
 
 def test_recommend_without_model_exits_cleanly(loaded_conn, tmp_path):

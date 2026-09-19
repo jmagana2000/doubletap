@@ -136,6 +136,9 @@ def search_cards(
     max_mv: str = "",
     fmt: str = "commander",
     limit: int = 60,
+    text: str = "",
+    rarity: str = "",
+    max_price: str = "",
 ) -> list[dict]:
     """Filterable card browse for the builder grid, popularity-ordered.
     Filters run in SQL over the JSON blobs; only matching rows are parsed."""
@@ -157,6 +160,19 @@ def search_cards(
     if max_mv:
         sql += " AND json_extract(json, '$.cmc') <= ?"
         params.append(float(max_mv))
+    if text:  # ponytail: front-face oracle text only; DFC back faces sit in card_faces
+        sql += " AND lower(json_extract(json, '$.oracle_text')) LIKE ?"
+        params.append(f"%{text.lower()}%")
+    if rarity:
+        sql += " AND json_extract(json, '$.rarity') = ?"
+        params.append(rarity.lower())
+    if max_price:  # unpriced cards drop out: an unknown price is not "under $X"
+        sql += (
+            " AND CAST(COALESCE(json_extract(json, '$.prices.usd'),"
+            " json_extract(json, '$.prices.usd_foil'),"
+            " json_extract(json, '$.prices.usd_etched')) AS REAL) <= ?"
+        )
+        params.append(float(max_price))
     if colors:  # cards castable within this identity: no off-color symbols
         for c in set("WUBRG") - set(colors.upper()):
             # cards.json must be table-qualified or SQLite won't correlate it
@@ -265,6 +281,64 @@ def swap_suggestions(path: str, k: int = 5) -> dict:
     }
 
 
+def list_models() -> list[dict]:
+    """Which checkpoint serves each format, with the holdout recovery@k it
+    recorded — the same resolution chain as cli._load_model, torch-free."""
+    from datetime import datetime
+
+    from . import db, formats
+
+    models_dir = db.data_home() / "models"
+    out = []
+    for name in formats.FORMATS:
+        entry = {
+            "format": name,
+            "file": None,
+            "algo": None,
+            "metrics": {},
+            "trained": None,
+        }
+        for candidate in (
+            f"cql_{name}.npz",
+            f"bc_{name}.npz",
+            f"cql_{name}.pt",
+            f"bc_{name}.pt",
+        ):
+            path = models_dir / candidate
+            if not path.exists():
+                continue
+            entry["file"] = candidate
+            entry["algo"] = candidate.split("_", 1)[0]
+            # the .pt is written by training; the .npz may be re-exported later
+            stamp = (
+                path.with_suffix(".pt") if path.with_suffix(".pt").exists() else path
+            )
+            entry["trained"] = (
+                datetime.fromtimestamp(stamp.stat().st_mtime).date().isoformat()
+            )
+            if path.suffix == ".npz":  # .pt metrics need torch; leave them blank
+                from .ml.infer_np import read_np_meta
+
+                entry["metrics"] = read_np_meta(path).get("metrics") or {}
+            break
+        out.append(entry)
+    return out
+
+
+def list_checkpoints() -> list[dict]:
+    """Every .pt in the live models dir — what `eval` and `train promote`
+    take — with the metrics its .npz sidecar recorded."""
+    from . import db
+    from .ml.infer_np import read_np_meta
+
+    out = []
+    for pt in sorted((db.data_home() / "models").glob("*.pt")):
+        npz = pt.with_suffix(".npz")
+        metrics = read_np_meta(npz).get("metrics") or {} if npz.exists() else {}
+        out.append({"path": str(pt), "name": pt.name, "metrics": metrics})
+    return out
+
+
 def _deck_path_arg(raw: str) -> str:
     """Confine GET deck-path params to the decks directory (defense in
     depth — the API is localhost-only, but there is no reason these
@@ -369,6 +443,10 @@ class Handler(BaseHTTPRequestHandler):
             )
         elif url.path == "/api/decks":
             self._send(200, list_decks())
+        elif url.path == "/api/models":
+            self._send(200, list_models())
+        elif url.path == "/api/checkpoints":
+            self._send(200, list_checkpoints())
         elif url.path == "/api/cards":
             self._send(
                 200,
@@ -378,6 +456,9 @@ class Handler(BaseHTTPRequestHandler):
                     type_=qs.get("type", ""),
                     max_mv=qs.get("max_mv", ""),
                     fmt=qs.get("format", "commander"),
+                    text=qs.get("text", ""),
+                    rarity=qs.get("rarity", ""),
+                    max_price=qs.get("max_price", ""),
                 ),
             )
         elif url.path == "/api/deck":
@@ -442,10 +523,37 @@ class Handler(BaseHTTPRequestHandler):
 
             from . import db
 
-            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tmp:
-                tmp.write(body.get("text", ""))
+            if body.get("file_b64") is not None:
+                # browser file picker: decode and write with the real suffix,
+                # since the CLI routes CSV / photo / text import by extension
+                import base64
+
+                from .decks import IMAGE_SUFFIXES
+
+                suffix = Path(str(body.get("filename", ""))).suffix.lower()
+                if suffix not in IMAGE_SUFFIXES | {".csv", ".txt"}:
+                    self._send(
+                        400, {"error": f"unsupported file type: {suffix or '(none)'}"}
+                    )
+                    return
+                try:
+                    data = base64.b64decode(body["file_b64"], validate=True)
+                except Exception:
+                    self._send(400, {"error": "file_b64 is not valid base64"})
+                    return
+                with tempfile.NamedTemporaryFile(
+                    "wb", suffix=suffix, delete=False
+                ) as tmp:
+                    tmp.write(data)
+            else:
+                with tempfile.NamedTemporaryFile(
+                    "w", suffix=".txt", delete=False, encoding="utf-8"
+                ) as tmp:
+                    tmp.write(body.get("text", ""))
             args = [
-                a.replace("@TEXT@", tmp.name).replace("@DECKS@", str(db.decks_dir()))
+                a.replace("@TEXT@", tmp.name)
+                .replace("@FILE@", tmp.name)
+                .replace("@DECKS@", str(db.decks_dir()))
                 for a in args
             ]
         elif self.path != "/api/run":

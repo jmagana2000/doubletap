@@ -168,17 +168,30 @@ else as a plain-text list.
 | `--companion` | — | Card name to set as the companion (sits outside the deck) |
 | `--threshold` | 90.0 | Fuzzy auto-accept score (0–100); matches at/above it (with a clear gap to the runner-up) import as `assumed` |
 | `--interactive/--no-interactive` | interactive | Whether to prompt to settle ambiguous/unmatched names in a terminal |
+| `--pick` | — | Settle an ambiguous line without a prompt: `--pick "raw line=Exact Card Name"`, repeatable. The raw line is exactly what the `ambiguous '…'` output quotes; the name must be one of the `|`-separated options it lists. This is what the web UI's chooser sends when it retries |
+| `--replace` | — | Substitute a line's card name before matching: `--replace "raw line=Card Name"`, repeatable. For `unmatched` lines — a misread photo, a typo nothing resembles — where `--pick` has no candidates to offer. The replacement goes through normal matching, so it must resolve exactly. The web UI sends this for names typed into its chooser |
 
 Text-list syntax: `4 Lightning Bolt` or `4x ...` or a bare name (qty 1);
 `# comments` and `// comments`; section headers `Deck`, `Commander`,
 `Companion`, `Sideboard` (sideboards are dropped); `*CMDR*` marker; Moxfield
 `(SET) 123` tails are stripped. Two `*CMDR*` lines = partner commanders.
 Imports never guess silently: ambiguous/unmatched lines abort the import
-(exit 1) unless settled interactively.
+(exit 1) unless settled interactively or with `--pick`.
 
 **`deck list`** — table of every deck in `~/.doubletap/decks/`: file, format,
 card count, commander (or contents for small commander-less files). No
 parameters.
+
+**`deck rename NAME NEW_NAME`** — rename a saved deck to
+`~/.doubletap/decks/<NEW_NAME>.json`. Refuses to overwrite an existing deck.
+
+**`deck copy NAME NEW_NAME`** — duplicate a saved deck under a new name,
+leaving the original in place. Refuses to overwrite an existing deck.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `NAME` | required | A saved deck name or an explicit file path; `.json` optional |
+| `NEW_NAME` | required | The new name; always saved into `~/.doubletap/decks/` |
 
 **`deck show NAME`** — every card in one deck: commander/partner/companion
 slots, then quantity, name, mana cost, and type line per card, alphabetical.
@@ -397,6 +410,9 @@ not**. Every training run writes two files: `<algo>_<format>.pt` (torch,
 for further training) and `<algo>_<format>.npz` (plain numpy weights).
 `recommend`/`complete` prefer the `.npz` and run torch-free — the numpy
 scorer is bit-for-bit equivalent to the torch model (pinned by a test).
+The `.npz` also carries the run's holdout recovery@k, which is what the web
+UI's **Serving models** panel (Data & Models tab) and the Suggestions page
+display for each format.
 
 **`train bc`** — trains the behavior-cloning baseline (the fallback model,
 and the initialization for CQL). Refuses to run on fewer than 20 parsed
@@ -407,6 +423,7 @@ decks. Writes `models/bc_<format>.pt` + `.npz`.
 | `--format`, `-f` | required | Which format to train for |
 | `--steps` | 1500 | Training steps; more = longer training, usually better up to a point |
 | `--seed` | 0 | Random seed, for reproducible training runs |
+| `--out` | live models dir | Directory to write the checkpoint into. **The default overwrites `models/bc_<format>` in place — the model `recommend`/`complete` serve.** Point this at a scratch directory for experiments (the keep-bar protocol in `docs/rl-strategy-research.md`) |
 
 **`train cql`** — trains the CQL model (the default for suggestions since
 it cleared the keep-bar; see the explainer above); requires the PMI table
@@ -418,11 +435,31 @@ first. Writes `models/cql_<format>.pt` + `.npz`.
 | `--steps` | 1500 | Training steps |
 | `--alpha` | 1.0 | Conservative-penalty weight; higher keeps the model closer to what human decks actually do |
 | `--seed` | 0 | Random seed |
-| `--init-from-bc/--no-init-from-bc` | on | Start from the BC checkpoint's weights when one exists |
+| `--init-from-bc/--no-init-from-bc` | on | Start from the BC checkpoint's weights when one exists (always read from the live models dir, even with `--out`) |
+| `--out` | live models dir | Directory to write the checkpoint into. **The default overwrites `models/cql_<format>` in place — the serving model.** Use a scratch directory for experiments |
 
 **`train export`** — converts existing `.pt` checkpoints in
 `~/.doubletap/models/` to torch-free `.npz` weights (needs torch; new
-training runs write both automatically). No parameters.
+training runs write both automatically). Also copies each run's recorded
+holdout metrics into the `.npz`, so re-run it once on older checkpoints if
+the web UI's **Serving models** panel shows "metrics unknown". No
+parameters.
+
+**`train promote SRC`** — makes a checkpoint the serving model for its
+format by copying it (the `.npz`, plus the `.pt` if present) into
+`~/.doubletap/models/` under its canonical `<algo>_<format>` name. First
+prints the candidate's recorded holdout recovery@50 next to the current
+serving model's, with the delta — the keep-bar comparison — so use
+`--dry-run` to see that without copying. Serving *order* is unchanged:
+`cql_<format>` is preferred over `bc_<format>` whenever both exist, so
+promoting a BC checkpoint while a CQL one is live does not switch the
+served algorithm. The web UI's **Promote…** button runs the dry run,
+shows you the comparison, and asks before copying.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `SRC` | required | Path to the checkpoint's `.pt` or `.npz` (e.g. one written by `train … --out`); the `.npz` must exist |
+| `--dry-run` | off | Print the comparison only; copy nothing |
 
 **`eval`** — held-out recovery@k: hides cards from unseen decks and measures
 how many the model ranks highly. Higher is better. Also reports a
